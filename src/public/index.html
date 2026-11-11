@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>uDrop — Instant Cross-Platform P2P</title>
+  <link rel="icon" type="image/svg+xml" href="assets/icon-brand.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Liquid Glass Optical Pairing Overlay Modal -->
+  <div id="qrGlassModal" class="glass-modal-overlay hidden" aria-hidden="true">
+    <div class="glass-modal-backdrop" id="qrModalBackdrop"></div>
+    <div class="glass-modal-container">
+      <div class="glass-modal-panel" id="glassModalPanel">
+        <!-- Top Control Bar -->
+        <div class="glass-modal-header">
+          <div class="glass-theme-picker">
+            <button class="glass-theme-btn active" data-theme="obsidian">Obsidian</button>
+            <button class="glass-theme-btn" data-theme="titanium">Titanium</button>
+            <button class="glass-theme-btn" data-theme="paper">Inverted White</button>
+          </div>
+          <button id="closeQrModalBtn" class="glass-close-btn" title="Close (Esc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <!-- Sleek Vector Card Viewport -->
+        <div class="glass-card-viewport">
+          <div class="glass-qr-wrapper" id="glassQrWrapper">
+            <canvas id="glassQrCanvas" class="glass-qr-canvas" aria-label="uDrop Optical Pairing Card"></canvas>
+          </div>
+        </div>
+
+        <!-- Footer Caption -->
+        <div class="glass-modal-footer">
+          <span class="glass-hint">Scan with iPhone or Android camera to beam files</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="brand">
+        <img src="assets/icon-brand.svg" alt="uDrop Icon" class="brand-icon">
+        <div class="brand-text">
+          <span class="logo-badge">uDrop</span>
+          <span class="brand-sub">UXIOM MESH</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="openQrModalBtn" class="btn-qr-pill" title="Show Optical Pairing Liquid Glass Card">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+          <span class="btn-text">Pair QR</span>
+        </button>
+        <div class="connection-status" id="connectionStatusPill">
+          <span class="status-dot"></span>
+          <span id="hostName">Connecting to Host...</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Section: UXIOM 5-Node Mesh Ring Topology -->
+      <section class="card mesh-card">
+        <div class="card-header">
+          <div class="mesh-title">
+            <span class="pulse-indicator"></span>
+            <h2>UXIOM Ring Topology</h2>
+          </div>
+          <span id="mySlotBadge" class="my-slot-badge">Assigned: [ - ]</span>
+        </div>
+
+        <div class="mesh-ring-container">
+          <div id="meshRing" class="mesh-ring">
+            <!-- Dynamically populated: [ U ], [ X ], [ I ], [ O ], [ M ], and [ SWARM ] -->
+          </div>
+        </div>
+
+        <div class="mesh-target-bar">
+          <span class="target-label">Target Recipient:</span>
+          <span id="targetNodeText" class="target-node-text">[ U ] Master Host</span>
+        </div>
+      </section>
+
+      <!-- Section: Send Files -->
+      <section class="card upload-card">
+        <div class="card-header">
+          <h2>Stream to Target</h2>
+          <span class="badge">Zero-Router 4K</span>
+        </div>
+
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="fileInput" multiple class="file-input" />
+          <input type="file" id="mediaInput" multiple accept="video/*,image/*" class="file-input-media" style="display: none;" />
+          <div class="dropzone-content">
+            <div id="dropzoneIconWrapper" class="dropzone-icon-box">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <div id="mascotFace" class="mascot-face" style="display: none;"></div>
+            <p id="dropzoneActionText" class="dropzone-text">Tap or Drag Files to Stream</p>
+            <span id="dropzoneHintText" class="dropzone-hint">Photos, 4K ProRes Videos, Large Archives</span>
+            <div class="dropzone-quick-actions" id="dropzoneQuickActions">
+              <button type="button" class="btn-picker-pill" id="pickMediaBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span>Select Videos / Photos</span>
+              </button>
+              <button type="button" class="btn-picker-pill outline" id="pickFilesBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                <span>All Files</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transfer Progress Area -->
+        <div id="transferContainer" class="transfer-container hidden">
+          <!-- Batch Summary Bar (Visible for multi-file batches) -->
+          <div id="batchSummaryBar" class="batch-summary-bar hidden">
+            <div class="batch-summary-info">
+              <div class="batch-title-row">
+                <span class="batch-title">Batch Transfer Queue</span>
+                <span id="batchCountBadge" class="batch-count-badge">0 / 0</span>
+              </div>
+              <span id="batchProgressStats" class="batch-progress-stats">0 MB / 0 MB (0%)</span>
+            </div>
+            <div class="progress-bar-bg batch-progress-bg">
+              <div id="batchProgressBar" class="progress-bar-fill batch-fill" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Active File Progress Info -->
+          <div class="transfer-info">
+            <div class="transfer-title-group">
+              <span id="transferFileName" class="transfer-file-name">filename.mp4</span>
+              <span id="transferStats" class="transfer-stats">0 MB / 0 MB</span>
+            </div>
+            <div class="transfer-metrics">
+              <span id="transferSpeed" class="transfer-speed">0.0 MB/s</span>
+              <span id="transferEta" class="transfer-eta">--:--</span>
+            </div>
+          </div>
+
+          <div class="progress-bar-bg">
+            <div id="progressBar" class="progress-bar-fill" style="width: 0%"></div>
+          </div>
+
+          <div class="transfer-footer">
+            <div class="transfer-footer-left">
+              <span id="transferChunks" class="chunk-badge">Chunk 0 / 0</span>
+              <span id="transferStatus" class="transfer-status-text">Uploading...</span>
+            </div>
+            <button id="cancelTransferBtn" class="btn-cancel-transfer" type="button" title="Cancel upload">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Cancel</span>
+            </button>
+          </div>
+
+          <!-- Detailed Multi-Item Queue List -->
+          <div id="queueListWrapper" class="queue-list-wrapper hidden">
+            <div class="queue-list-header">
+              <span class="queue-list-title">Queue Items</span>
+              <button id="retryFailedBtn" class="btn-retry-failed hidden" type="button">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span id="retryFailedBtnText">Retry Failed</span>
+              </button>
+            </div>
+            <div id="queueItemsList" class="queue-items-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Incoming Mesh Transfer Notification -->
+      <div id="incomingTransferCard" class="card incoming-card hidden">
+        <div class="card-header">
+          <div class="incoming-header-left">
+            <span class="incoming-badge">Incoming Mesh Transfer</span>
+            <span id="incomingFromText" class="incoming-from">From Node [O]</span>
+          </div>
+          <button id="dismissIncomingBtn" class="btn-dismiss-incoming" title="Dismiss">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="incoming-body">
+          <div class="incoming-info">
+            <h3 id="incomingFileName">VID_4K.mp4</h3>
+            <span id="incomingFileSize">0 MB</span>
+          </div>
+          <a id="incomingDownloadBtn" href="#" class="btn-incoming-download" download>Download File</a>
+        </div>
+      </div>
+
+      <!-- Section: Download from Host -->
+      <section class="card download-card">
+        <div class="card-header">
+          <h2>Files from Host</h2>
+          <button id="refreshFilesBtn" class="btn-icon" title="Refresh">↻</button>
+        </div>
+        <div id="hostFilesList" class="host-files-list">
+          <p class="empty-state">No files currently shared by the host.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>100% Offline P2P • UXIOM Ring Mesh • Zero Cloud Storage</span>
+    </footer>
+  </div>
+
+  <!-- Background Media Anchor to Keep Mobile Screen Awake and Prevent Throttling on HTTP -->
+  <video id="wakeLockVideo" playsinline muted loop style="display:none; width:1px; height:1px; position:fixed; opacity:0; pointer-events:none;"></video>
+
+  <script src="qr-kinetic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>uDrop • Dynamic Island HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: rgba(10, 11, 16, 0.95);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .hud-backdrop {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 24px;
+    }
+    .hud-hint {
+      margin-top: 130px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.3px;
+      text-align: center;
+      font-family: ui-monospace, monospace;
+    }
+    .hud-hint a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+    .hud-hint a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud-backdrop">
+    <!-- Liquid Glass Dynamic Island Overlay -->
+    <div id="dynamicIsland" class="dynamic-island state-idle" title="Click to open uDrop folder">
+      <div class="island-content">
+        <!-- State 1: Idle -->
+        <div class="island-idle">
+          <span class="island-pulse"></span>
+          <span class="island-idle-text">uDrop Mesh Active</span>
+          <span class="island-badge">[ U ]</span>
+        </div>
+
+        <!-- State 2: Active Receiving -->
+        <div class="island-receiving">
+          <div class="island-left">
+            <div class="island-wave">
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="island-center">
+            <div class="island-title-row">
+              <span class="island-source">Receiving from <b id="islandFromNode">[ X ]</b></span>
+              <span id="islandSpeed" class="island-speed">-- MB/s</span>
+            </div>
+            <div class="island-filename" id="islandFileName">filename.ext</div>
+            <div class="island-progress-track">
+              <div id="islandProgressBar" class="island-progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="island-right">
+            <span id="islandPercent" class="island-percent">0%</span>
+          </div>
+        </div>
+
+        <!-- State 3: Complete & Hero Action -->
+        <div class="island-complete">
+          <div class="island-complete-left">
+            <span class="island-check">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </span>
+          </div>
+          <div class="island-complete-center">
+            <div class="island-complete-title">File Received</div>
+            <div class="island-complete-meta">
+              <span id="islandCompleteName">photo.jpg</span>
+              <span class="island-dot">•</span>
+              <span id="islandCompleteSize">26 KB</span>
+            </div>
+          </div>
+          <div class="island-complete-right">
+            <button id="islandOpenFolderBtn" class="btn-island-action" title="Show in Windows File Explorer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              <span>Show in Explorer</span>
+            </button>
+            <button id="islandDismissBtn" class="btn-island-close" title="Dismiss">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-hint">
+      Liquid Glass Dynamic Island Overlay HUD • <a href="/">Open Full Dashboard</a>
+    </div>
+  </div>
+
+  <script>
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    const dynamicIsland = document.getElementById('dynamicIsland');
+    const islandFromNode = document.getElementById('islandFromNode');
+    const islandSpeed = document.getElementById('islandSpeed');
+    const islandFileName = document.getElementById('islandFileName');
+    const islandProgressBar = document.getElementById('islandProgressBar');
+    const islandPercent = document.getElementById('islandPercent');
+    const islandCompleteName = document.getElementById('islandCompleteName');
+    const islandCompleteSize = document.getElementById('islandCompleteSize');
+    const islandOpenFolderBtn = document.getElementById('islandOpenFolderBtn');
+    const islandDismissBtn = document.getElementById('islandDismissBtn');
+
+    let islandRevertTimer = null;
+    let currentHostTransfer = null;
+    let lastReceivedFile = null;
+    let islandAudioCtx = null;
+
+    function setIslandState(state) {
+      if (!dynamicIsland) return;
+      dynamicIsland.classList.remove('state-idle', 'state-receiving', 'state-complete');
+      dynamicIsland.classList.add(state);
+    }
+
+    function playSuccessChime() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!islandAudioCtx) islandAudioCtx = new AudioCtx();
+        if (islandAudioCtx.state === 'suspended') {
+          islandAudioCtx.resume();
+        }
+        const now = islandAudioCtx.currentTime;
+
+        const playTone = (freq, start, duration, gainVal = 0.16) => {
+          const osc = islandAudioCtx.createOscillator();
+          const gain = islandAudioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.001, start);
+          gain.gain.linearRampToValueAtTime(gainVal, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+          osc.connect(gain);
+          gain.connect(islandAudioCtx.destination);
+          osc.start(start);
+          osc.stop(start + duration);
+        };
+
+        playTone(659.25, now, 0.22, 0.15);
+        playTone(1046.50, now + 0.10, 0.40, 0.20);
+      } catch (err) {}
+    }
+
+    const eventSource = new EventSource('/api/mesh/events');
+
+    eventSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'host_transfer_start') {
+          if (islandRevertTimer) clearTimeout(islandRevertTimer);
+          currentHostTransfer = {
+            fileId: data.fileId,
+            fileName: data.fileName,
+            fileSize: data.fileSize || 0,
+            totalChunks: data.totalChunks || 1,
+            fromSlot: data.fromSlot || 'Node',
+            queueIndex: data.queueIndex || 1,
+            totalFiles: data.totalFiles || 1,
+            startTime: Date.now(),
+            lastBytes: 0,
+            lastTime: Date.now()
+          };
+          if (data.totalFiles && data.totalFiles > 1) {
+            if (islandFileName) islandFileName.textContent = `[${data.queueIndex}/${data.totalFiles}] ${data.fileName}`;
+            if (islandFromNode) islandFromNode.textContent = `[ ${data.fromSlot || 'Node'} ] Queue ${data.queueIndex}/${data.totalFiles}`;
+          } else {
+            if (islandFileName) islandFileName.textContent = data.fileName;
+            if (islandFromNode) islandFromNode.textContent = `[ ${data.fromSlot || 'Node'} ]`;
+          }
+          if (islandSpeed) islandSpeed.textContent = 'Streaming...';
+          if (islandProgressBar) islandProgressBar.style.width = '0%';
+          if (islandPercent) islandPercent.textContent = '0%';
+          setIslandState('state-receiving');
+        } else if (data.type === 'host_transfer_progress') {
+          if (!currentHostTransfer || currentHostTransfer.fileId !== data.fileId) {
+            currentHostTransfer = {
+              fileId: data.fileId,
+              fileSize: data.totalBytes || 0,
+              totalChunks: data.totalChunks || 1,
+              startTime: Date.now(),
+              lastBytes: 0,
+              lastTime: Date.now()
+            };
+          }
+          const totalBytes = data.totalBytes || currentHostTransfer.fileSize || 0;
+          const hasByteProgress = (typeof data.receivedBytes === 'number' && totalBytes > 0);
+          const percent = hasByteProgress
+            ? Math.min(100, Math.round((data.receivedBytes / totalBytes) * 100))
+            : Math.min(100, Math.round((data.receivedTotal / (data.totalChunks || 1)) * 100));
+          if (islandProgressBar) islandProgressBar.style.width = `${percent}%`;
+          if (islandPercent) islandPercent.textContent = `${percent}%`;
+          const currentBytes = hasByteProgress
+            ? data.receivedBytes
+            : (currentHostTransfer.fileSize ? (data.receivedTotal / currentHostTransfer.totalChunks) * currentHostTransfer.fileSize : 0);
+          if (currentBytes > 0) {
+            const now = Date.now();
+            const elapsed = (now - currentHostTransfer.lastTime) / 1000;
+            if (elapsed >= 0.4) {
+              const delta = currentBytes - currentHostTransfer.lastBytes;
+              const speedMb = (delta / (1024 * 1024 * elapsed)).toFixed(1);
+              if (islandSpeed && Number(speedMb) > 0) islandSpeed.textContent = `${speedMb} MB/s`;
+              currentHostTransfer.lastBytes = currentBytes;
+              currentHostTransfer.lastTime = now;
+            }
+          }
+        } else if (data.type === 'host_transfer_cancel') {
+          if (!currentHostTransfer || currentHostTransfer.fileId === data.fileId) {
+            currentHostTransfer = null;
+            if (islandRevertTimer) clearTimeout(islandRevertTimer);
+            setIslandState('state-idle');
+          }
+        } else if (data.type === 'host_transfer_complete') {
+          lastReceivedFile = {
+            fileName: data.fileName,
+            filePath: data.filePath,
+            fileSize: data.fileSize
+          };
+          if (islandCompleteName) islandCompleteName.textContent = data.fileName;
+          if (islandCompleteSize) islandCompleteSize.textContent = formatBytes(data.fileSize);
+          setIslandState('state-complete');
+          playSuccessChime();
+          if (islandRevertTimer) clearTimeout(islandRevertTimer);
+          islandRevertTimer = setTimeout(() => {
+            setIslandState('state-idle');
+          }, 8000);
+        }
+      } catch (err) {}
+    };
+
+    if (islandOpenFolderBtn) {
+      islandOpenFolderBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const origHtml = islandOpenFolderBtn.innerHTML;
+          islandOpenFolderBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Opened!</span>
+          `;
+          await fetch('/api/open-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath: lastReceivedFile?.filePath,
+              fileName: lastReceivedFile?.fileName
+            })
+          });
+          setTimeout(() => {
+            islandOpenFolderBtn.innerHTML = origHtml;
+          }, 2000);
+        } catch (err) {}
+      });
+    }
+
+    if (islandDismissBtn) {
+      islandDismissBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (islandRevertTimer) clearTimeout(islandRevertTimer);
+        setIslandState('state-idle');
+      });
+    }
+
+    if (dynamicIsland) {
+      dynamicIsland.addEventListener('click', () => {
+        if (dynamicIsland.classList.contains('state-idle')) {
+          fetch('/api/open-folder', { method: 'POST' }).catch(() => {});
+        }
+      });
+    }
+  </script>
+</body>
+</html>

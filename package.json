@@ -1,0 +1,68 @@
+{
+  "name": "@uxiom/udrop",
+  "version": "0.1.0",
+  "description": "Zero-router, cross-platform P2P file transfer tool with resumable 4K streaming and zero app install on phones",
+  "main": "src/server.js",
+  "type": "module",
+  "exports": {
+    ".": "./src/server.js",
+    "./transfer": "./src/transfer.js",
+    "./mesh": "./src/mesh.js",
+    "./network": "./src/network.js",
+    "./qr": "./src/qr-svg.js",
+    "./daemon": "./src/daemon.js",
+    "./hotspot": "./src/hotspot.js",
+    "./desktop": "./src/desktop.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "udrop": "bin/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node ./bin/index.js",
+    "test": "node test/test-transfer.js && node test/test-daemon.js",
+    "test:win": "node test/test-exe.js",
+    "build:win": "powershell -ExecutionPolicy Bypass -File ./installer/build-windows.ps1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uxiom/udrop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/uxiom/udrop/issues"
+  },
+  "homepage": "https://github.com/uxiom/udrop#readme",
+  "keywords": [
+    "airdrop",
+    "airdrop-alternative",
+    "p2p",
+    "file-transfer",
+    "cross-platform",
+    "offline",
+    "wi-fi-direct",
+    "hotspot",
+    "resumable",
+    "cli",
+    "uxiom"
+  ],
+  "author": "Uxiom <uxiom.support@gmail.com>",
+  "contributors": [
+    {
+      "name": "vd1686",
+      "url": "https://github.com/vd1686"
+    }
+  ],
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

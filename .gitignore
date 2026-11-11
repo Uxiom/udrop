@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+coverage/
+udrop-staging/
+dist/
+*.zip
+tmp-*/

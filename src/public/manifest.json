@@ -1,0 +1,17 @@
+{
+  "name": "uDrop - UXIOM Mesh",
+  "short_name": "uDrop",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "description": "Zero-router, cross-platform P2P file transfer and 4K streaming",
+  "icons": [
+    {
+      "src": "assets/icon-brand.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

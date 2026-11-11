@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>uDrop — Optical Pairing Card</title>
+  <link rel="icon" type="image/svg+xml" href="assets/icon-brand.svg">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: #09090b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .qr-showcase {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .card-wrapper {
+      width: 100%;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(255, 255, 255, 0.12);
+      animation: floatCard 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card-wrapper:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.9), 0 0 1px 1px rgba(255, 255, 255, 0.20);
+    }
+
+    @keyframes floatCard {
+      from { opacity: 0; transform: translateY(16px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    #qrSvgImage {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .theme-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 10px;
+      border-radius: 100px;
+    }
+
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .theme-btn:hover {
+      color: #fff;
+    }
+
+    .theme-btn.active {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .footer-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .btn-action {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      border-radius: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-action-primary {
+      background: #fff;
+      color: #000;
+    }
+
+    .btn-action-primary:hover {
+      background: #e5e7eb;
+    }
+
+    .btn-action-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: #e5e7eb;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-action-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  </style>
+</head>
+<body>
+  <div class="qr-showcase">
+    <!-- Theme Switcher -->
+    <div class="theme-picker">
+      <button class="theme-btn active" data-theme="obsidian">Obsidian</button>
+      <button class="theme-btn" data-theme="titanium">Titanium</button>
+      <button class="theme-btn" data-theme="paper">Inverted White</button>
+    </div>
+
+    <!-- Sleek Kinetic QR Card -->
+    <div class="card-wrapper" id="cardWrapper">
+      <canvas id="qrShowcaseCanvas" style="display: block; width: 100%; height: 470px;" aria-label="uDrop Custom Sleek QR Card"></canvas>
+    </div>
+
+    <!-- Actions -->
+    <div class="footer-actions">
+      <a href="/" class="btn-action btn-action-primary">Open Dashboard</a>
+      <a id="downloadSvgBtn" href="/api/qr.svg?theme=obsidian" download="udrop-qr.svg" class="btn-action btn-action-secondary">Save Vector SVG</a>
+    </div>
+  </div>
+
+  <script src="qr-kinetic.js"></script>
+  <script>
+    const canvas = document.getElementById('qrShowcaseCanvas');
+    const downloadBtn = document.getElementById('downloadSvgBtn');
+    const cardWrapper = document.getElementById('cardWrapper');
+    const themeButtons = document.querySelectorAll('.theme-btn');
+    const kinetic = window.createKineticQr(canvas, { theme: 'obsidian' });
+    let initialMobileCount = null;
+    let paired = false;
+
+    kinetic.assemble({ theme: 'obsidian' });
+
+    themeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        themeButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const theme = btn.dataset.theme;
+        downloadBtn.href = `/api/qr.svg?theme=${theme}`;
+        kinetic.setTheme(theme);
+
+        if (theme === 'paper') {
+          cardWrapper.style.boxShadow = '0 25px 60px rgba(0, 0, 0, 0.5), 0 0 1px 1px rgba(255, 255, 255, 0.4)';
+        } else if (theme === 'titanium') {
+          cardWrapper.style.boxShadow = '0 25px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(255, 255, 255, 0.08)';
+        } else {
+          cardWrapper.style.boxShadow = '0 25px 60px rgba(0, 0, 0, 0.9), 0 0 1px 1px rgba(255, 255, 255, 0.12)';
+        }
+      });
+    });
+
+    const es = new EventSource('/api/mesh/events');
+    es.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'ring_update' && Array.isArray(msg.ring)) {
+          const count = msg.ring.filter(n => n.assigned && !n.isHost).length;
+          if (initialMobileCount === null) {
+            initialMobileCount = count;
+            return;
+          }
+          if (!paired && count > initialMobileCount) {
+            paired = true;
+            kinetic.disassemble('Device Connected', () => {
+              setTimeout(() => { window.location.href = '/'; }, 400);
+            });
+          }
+        } else if (msg.type === 'qr_scanned' && !paired) {
+          paired = true;
+          kinetic.disassemble('Pairing Phone...', () => {
+            setTimeout(() => { window.location.href = '/'; }, 500);
+          });
+        }
+      } catch {}
+    };
+  </script>
+</body>
+</html>

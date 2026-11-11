@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>uDrop Documentation — Zero-Router P2P File Transfer (by Uxiom)</title>
+  <meta name="description" content="Official uDrop documentation: Windows System Tray Toggle (Ctrl+Shift+U), Liquid Glass QR Overlay, Explorer Share via uDrop, UXIOM 5-Node Ring Mesh, and Bandwidth Smartness.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="#top" class="brand-link">
+        <img src="favicon.svg" alt="uDrop Logo" class="brand-icon">
+        <span>uDrop Docs</span>
+        <span class="brand-sub">by <img src="uxiom-light.svg" alt="Uxiom" class="uxiom-inline-mark"></span>
+      </a>
+
+      <div class="header-actions">
+        <button id="navToggle" class="nav-toggle" type="button">Menu</button>
+        <a href="https://github.com/Uxiom/udrop" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">GitHub Repo</a>
+        <a href="https://github.com/Uxiom/udrop/releases/latest/download/uDrop-Setup.exe" class="btn btn-primary btn-sm">Download Windows (.exe)</a>
+      </div>
+    </div>
+  </header>
+
+  <div id="top" class="docs-shell">
+
+    <aside id="docsSidebar" class="sidebar" aria-label="Documentation Navigation">
+      <div class="sidebar-group">
+        <p class="sidebar-heading">Getting Started</p>
+        <ul class="sidebar-nav">
+          <li><a href="#download" class="active">Download &amp; Install</a></li>
+          <li><a href="#system-feature">Windows System Feature</a></li>
+          <li><a href="#hotkeys">Shortcuts &amp; Triggers</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <p class="sidebar-heading">System Controls</p>
+        <ul class="sidebar-nav">
+          <li><a href="#tray-flyout">Taskbar Tray &amp; Flyout</a></li>
+          <li><a href="#glass-overlay">Liquid Glass QR Overlay</a></li>
+          <li><a href="#explorer-share">Explorer Right-Click Share</a></li>
+          <li><a href="#cli-flags">udrop.exe CLI Reference</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <p class="sidebar-heading">Transfers &amp; Mesh</p>
+        <ul class="sidebar-nav">
+          <li><a href="#phone-pairing">Zero-App Phone Pairing</a></li>
+          <li><a href="#bandwidth">Bandwidth Smartness &amp; Cancel</a></li>
+          <li><a href="#uxiom-mesh">UXIOM 5-Node Ring Mesh</a></li>
+          <li><a href="#hotspot">Router-Less Hotspot</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <p class="sidebar-heading">Maintenance &amp; Help</p>
+        <ul class="sidebar-nav">
+          <li><a href="#security">Security &amp; Registry</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#uninstall">Uninstallation</a></li>
+          <li><a href="#build-source">Build from Source</a></li>
+          <li><a href="#support">Support &amp; Contact</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="content">
+
+      <!-- Hero & Interactive System Feature Preview -->
+      <section class="hero-grid" aria-label="Overview">
+        <div class="card hero-card">
+          <div>
+            <div class="badge-row">
+              <span class="pill">Windows 10 / 11</span>
+              <span class="pill">Zero Mobile App</span>
+              <span class="pill">100% Offline LAN</span>
+            </div>
+            <h1 class="hero-title">AirDrop-Class Transfers for Windows, iPhone, and Android.</h1>
+            <p class="hero-desc">
+              Stream uncompressed 4K videos and files directly across local Wi-Fi without cloud accounts or mobile apps. Turn uDrop ON or OFF from your Windows Taskbar beside Wi-Fi and Bluetooth, or press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd>.
+            </p>
+          </div>
+          <div>
+            <div class="hero-cta-row">
+              <a href="https://github.com/Uxiom/udrop/releases/latest/download/uDrop-Setup.exe" class="btn btn-primary">Download uDrop-Setup.exe</a>
+              <a href="https://github.com/Uxiom/udrop/releases/latest/download/uDrop-Portable-win64.zip" class="btn btn-secondary">Portable ZIP</a>
+            </div>
+            <div class="hero-meta">
+              Self-contained ~32.7 MB Windows installer (asInvoker, no admin UAC required) —
+              <a href="https://github.com/Uxiom/udrop/releases" target="_blank" rel="noopener">All GitHub Releases</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Simulated Tray Preview -->
+        <div class="card preview-card" aria-label="Interactive UI Simulation">
+          <div class="preview-header">
+            <div>
+              <div class="preview-label">Interactive Tray Preview</div>
+              <span id="previewStatePill" class="pill" style="margin-top:6px;">OFF - Startup Default</span>
+            </div>
+            <button id="previewSwitch" class="switch-btn" type="button" role="switch" aria-checked="false" aria-label="Toggle simulated uDrop state">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="preview-body">
+            <div id="previewOff">
+              <p class="preview-status-title">uDrop starts OFF on Windows logon</p>
+              <p class="preview-status-sub">
+                Port 4040 stays closed and zero background Node streams run until you click the tray switch, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>, or right-click a file.
+              </p>
+            </div>
+
+            <div id="previewOn" style="display:none;">
+              <div class="preview-qr-box">
+                <svg class="preview-qr-svg" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <rect width="21" height="21" fill="#FAFAFA"/>
+                  <path fill="#09090B" d="M1,1 h7 v7 h-7 z M2,2 v5 h5 v-5 z M3,3 h3 v3 h-3 z M13,1 h7 v7 h-7 z M14,2 v5 h5 v-5 z M15,3 h3 v3 h-3 z M1,13 h7 v7 h-7 z M2,14 v5 h5 v-5 z M3,15 h3 v3 h-3 z M9,2 h2 v2 h-2 z M9,6 h2 v2 h-2 z M10,10 h3 v3 h-3 z M14,10 h2 v2 h-2 z M17,10 h3 v2 h-3 z M10,15 h2 v2 h-2 z M14,14 h3 v3 h-3 z M17,17 h3 v3 h-3 z"/>
+                </svg>
+                <div>
+                  <p class="preview-status-title">Liquid Glass QR Overlay</p>
+                  <p class="preview-status-sub">http://your-pc.local:4040<br>Direct IP toggle &bull; Pin &bull; Turn OFF</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-footer">
+            <span id="previewFootState">Port 4040 Closed (~2 MB Tray)</span>
+            <span>UI Simulation</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Download & Install -->
+      <section id="download" class="doc-section">
+        <h2>1. Download &amp; Installation</h2>
+        <p>Choose the installation method that matches your setup:</p>
+
+        <div class="grid-2">
+          <div class="mini-card">
+            <h4>Method A: Standalone Windows Installer (Recommended)</h4>
+            <p>Download <strong>uDrop-Setup.exe</strong> (~32.7 MB). It embeds the portable Node runtime and native tray binary inside one file, offers custom folder selection via <strong>Browse...</strong>, registers startup tray mode (<strong>OFF by default</strong>), and adds Explorer right-click sharing.</p>
+          </div>
+          <div class="mini-card">
+            <h4>Method B: Portable ZIP (Zero Registry Changes)</h4>
+            <p>Download <strong>uDrop-Portable-win64.zip</strong>, extract anywhere (including USB drives), and double-click <code>udrop.exe</code> to activate immediately—or run <code>udrop.exe --tray</code> to dock quietly in the taskbar.</p>
+          </div>
+        </div>
+
+        <h3>Method C: Developer CLI (Node.js)</h3>
+        <div class="code-block">
+          <div class="code-top">
+            <span>Terminal (npx / npm)</span>
+            <button class="copy-btn" type="button">Copy</button>
+          </div>
+          <pre>npx @uxiom/udrop
+
+# Or install globally:
+npm install -g @uxiom/udrop</pre>
+        </div>
+      </section>
+
+      <!-- Section: Windows System Feature -->
+      <section id="system-feature" class="doc-section">
+        <h2>2. Windows System Feature Overview</h2>
+        <p>
+          Microsoft restricts the built-in Windows 11 Quick Settings menu (<code>Win + A</code>) exclusively to first-party system components. To deliver identical one-click ON/OFF access right beside your Wi-Fi and Bluetooth controls without UAC prompts or system file modification, uDrop runs as a native user-space notification area controller (<code>udrop.exe</code>).
+        </p>
+
+        <div class="callout">
+          <strong>Starts OFF by Default:</strong> On Windows startup, port <code>4040</code> remains closed and no background <code>node.exe</code> engine runs (~2 MB idle tray footprint) until you flip uDrop <strong>ON</strong>.
+        </div>
+      </section>
+
+      <!-- Section: Shortcuts & Triggers -->
+      <section id="hotkeys" class="doc-section">
+        <h2>3. Shortcuts &amp; Quick Triggers</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Control / Shortcut</th>
+                <th>Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd></td>
+                <td>Global hotkey from anywhere in Windows: toggles uDrop <strong>ON</strong> (opening the Glass QR Overlay) or <strong>OFF</strong> cleanly.</td>
+              </tr>
+              <tr>
+                <td><strong>Tray Icon Left-Click</strong></td>
+                <td>Opens the compact Quick Toggle Flyout above your taskbar corner with the master ON/OFF switch.</td>
+              </tr>
+              <tr>
+                <td><strong>Tray Icon Right-Click</strong></td>
+                <td>Opens context menu: <em>Turn uDrop ON/OFF</em>, <em>Show Glass Pairing QR</em>, <em>Copy Connect URL</em>, <em>Open Downloads Folder</em>, <em>Open Web Dashboard</em>, <em>Quit uDrop Tray</em>.</td>
+              </tr>
+              <tr>
+                <td><strong>Explorer Right-Click &rarr; Share via uDrop</strong></td>
+                <td>Automatically switches uDrop <strong>ON</strong>, shares the selected file, and opens the Glass Pairing QR Overlay.</td>
+              </tr>
+              <tr>
+                <td><strong>Desktop / Start Menu Shortcut</strong></td>
+                <td>Ensures the tray controller is running, flips uDrop <strong>ON</strong>, and shows the Glass QR Overlay.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section: Tray & Flyout -->
+      <section id="tray-flyout" class="doc-section">
+        <h2>4. Taskbar System Tray &amp; Quick Toggle Flyout</h2>
+        <p>The monochromatic <code>[ U ]</code> tray icon visually reflects uDrop state at a glance:</p>
+        <ul>
+          <li><strong>OFF State (Muted Gray Circle):</strong> Port <code>4040</code> closed; tooltip displays <code>uDrop: OFF (Click to turn on)</code>.</li>
+          <li><strong>ON State (White Circle + Green Status Dot):</strong> Transfer engine active on port <code>4040</code>; tooltip shows active port.</li>
+        </ul>
+        <p>Inside the Quick Toggle Flyout, you have instant access to:</p>
+        <ul>
+          <li><strong>Master Power Pill Switch:</strong> One click starts or stops the local transfer engine cleanly.</li>
+          <li><strong>Live URL &amp; IP Readout:</strong> Displays <code>http://&lt;host&gt;.local:4040</code> and direct LAN IPv4 address.</li>
+          <li><strong>Mesh Device Count:</strong> Shows connected slots on the UXIOM Ring.</li>
+          <li><strong>Action Bar:</strong> <em>Show Glass QR Overlay</em>, <em>Copy URL</em>, <em>Folder</em> (<code>Downloads\uDrop</code>), <em>Web UI</em>, and <em>Quit uDrop</em>.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Glass Overlay -->
+      <section id="glass-overlay" class="doc-section">
+        <h2>5. Kinetic Liquid Glass QR &amp; Live Transfer Overlay</h2>
+        <p>
+          The moment uDrop switches <strong>ON</strong>, particles gather and assemble into a frosted acrylic-glass QR card on your screen with zero browser chrome or terminal windows.
+        </p>
+        <ul>
+          <li><strong>Kinetic Assemble &rarr; Dismantle:</strong> Point your iPhone Camera or Android Camera app at the assembled QR code. Once paired, the QR pieces smoothly dismantle outward and morph directly into the <strong>Live Transfer Overlay Dashboard</strong>.</li>
+          <li><strong>Live Transfer Monitor:</strong> Track active uploads/downloads in real time, open completed files immediately, drag-and-drop host files to share (or unshare with <code>X</code>), and click <strong>Pair Device (QR)</strong> anytime to re-assemble the QR.</li>
+          <li><strong>Use IP / Use .local Switch:</strong> Toggle between mDNS hostname and direct IPv4 address if an Android device or router does not resolve <code>.local</code> hostnames.</li>
+          <li><strong>Pin / Minimize / Turn OFF:</strong> Pin topmost with <strong>Pin</strong>, minimize to tray via <kbd>Esc</kbd> or <code>X</code> (keeping uDrop active), or click <strong>Turn OFF</strong> to close port <code>4040</code>.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Explorer Right-Click Share -->
+      <section id="explorer-share" class="doc-section">
+        <h2>6. Windows File Explorer Right-Click Sharing</h2>
+        <p>Enabled by default during Setup via per-user registry key (<code>HKCU\Software\Classes\*\shell\uDropShare</code>):</p>
+        <ol>
+          <li>Right-click any video, photo, PDF, or archive in Windows File Explorer.</li>
+          <li>Select <strong>Share via uDrop</strong>.</li>
+          <li>uDrop wakes the background engine (if OFF), registers the file over loopback HTTP, updates already-connected phones over Server-Sent Events, and displays the Liquid Glass QR Overlay labeled <code>Sharing: &lt;filename&gt;</code>.</li>
+        </ol>
+      </section>
+
+      <!-- Section: CLI Flags -->
+      <section id="cli-flags" class="doc-section">
+        <h2>7. <code>udrop.exe</code> Command-Line Reference</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>udrop.exe --tray</code></td>
+                <td>Starts single-instance Windows System Tray host in <strong>OFF</strong> default state.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --tray --on</code></td>
+                <td>Starts tray host <strong>ON</strong> and opens the Glass QR Overlay.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --toggle</code></td>
+                <td>Flips running tray instance between <strong>ON</strong> and <strong>OFF</strong> via Named Pipe IPC.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --qr</code></td>
+                <td>Ensures uDrop is <strong>ON</strong> and pops open the Glass QR Overlay.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --share "&lt;file&gt;"</code></td>
+                <td>Turns <strong>ON</strong>, registers the file outbound, and opens the Glass QR Overlay.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --silent</code></td>
+                <td>Starts background HTTP/SSE transfer engine headlessly without tray UI.</td>
+              </tr>
+              <tr>
+                <td><code>udrop.exe --stop</code></td>
+                <td>Calls graceful loopback <code>POST /api/shutdown</code> and terminates only uDrop's recorded PID.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section: Phone Pairing -->
+      <section id="phone-pairing" class="doc-section">
+        <h2>8. Zero-App Phone Pairing &amp; Transfers</h2>
+        <ol>
+          <li>Ensure your PC and phone share the same Wi-Fi network (or use Hotspot mode).</li>
+          <li>Turn uDrop <strong>ON</strong> via the tray or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd>.</li>
+          <li>Scan the Glass QR Overlay with your phone camera to launch the embedded Progressive Web App in Safari or Chrome.</li>
+          <li>Select photos, 4K videos, or files on your phone—transfers stream directly into <code>C:\Users\&lt;user&gt;\Downloads\uDrop</code>.</li>
+        </ol>
+      </section>
+
+      <!-- Section: Bandwidth Smartness & Cancel -->
+      <section id="bandwidth" class="doc-section">
+        <h2>9. Bandwidth Smartness &amp; Clean Cancellation</h2>
+        <div class="grid-2">
+          <div class="mini-card">
+            <h4>Single-File Dedicated Full-Bandwidth Pipe</h4>
+            <p>Sending 1 file (such as a 40 MB video) uses 1 continuous XHR stream (<code>concurrency: 1</code> for files up to 64 MB; 32 MB chunks up to 256 MB) with live 0%-100% progress and a 25s inactivity watchdog instead of a fixed wall-clock cutoff.</p>
+          </div>
+          <div class="mini-card">
+            <h4>Multi-Video Queue &amp; Cancel Purge</h4>
+            <p>Batching multiple videos automatically switches to dual 4 MB/8 MB resumable pipelines with HTTP mobile stay-awake lock. Tapping <strong>Cancel</strong> aborts active XHR sockets, deletes partial files from disk, purges server session maps, and clears the phone queue immediately.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: UXIOM Mesh -->
+      <section id="uxiom-mesh" class="doc-section">
+        <h2>10. UXIOM 5-Node Ring Mesh</h2>
+        <p>
+          Connected devices dynamically claim slots around the host PC in a 5-slot ring topology:
+        </p>
+        <ul>
+          <li><strong><code>[ U ]</code> Host PC / Laptop:</strong> Anchors the mesh and performs zero-lag direct-offset writes.</li>
+          <li><strong><code>[ X ]</code> <code>[ I ]</code> <code>[ O ]</code> <code>[ M ]</code> Connected Devices:</strong> iPhone, Android, Mac, or guest laptops joining via QR scan.</li>
+          <li><strong>Cross-OS Transit Bridge &amp; Swarm Broadcast:</strong> iPhone <code>[ X ]</code> can send directly to Android <code>[ I ]</code> or tap <code>[ ALL ]</code> to broadcast to all active ring nodes over Server-Sent Events.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Hotspot -->
+      <section id="hotspot" class="doc-section">
+        <h2>11. Router-Less Mode (Windows Hotspot)</h2>
+        <p>When traveling without a Wi-Fi router or on client-isolated public Wi-Fi (on hardware drivers supporting Windows Hosted Network):</p>
+        <div class="code-block">
+          <div class="code-top">
+            <span>Terminal</span>
+            <button class="copy-btn" type="button">Copy</button>
+          </div>
+          <pre>udrop --hotspot</pre>
+        </div>
+        <p>Scan the terminal Wi-Fi QR code to connect directly antenna-to-antenna over <code>192.168.137.1</code>.</p>
+      </section>
+
+      <!-- Section: Security & Registry -->
+      <section id="security" class="doc-section">
+        <h2>12. Security, Privacy &amp; Registry Footprint</h2>
+        <ul>
+          <li><strong>Zero Elevation Required:</strong> Compiled with <code>asInvoker</code> manifest; no administrator UAC prompt needed.</li>
+          <li><strong>User-Space Registry Keys Only:</strong>
+            <ul>
+              <li>Startup Tray: <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run\uDrop</code></li>
+              <li>Explorer Menu: <code>HKCU\Software\Classes\*\shell\uDropShare</code></li>
+              <li>Uninstaller Entry: <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\uDrop</code></li>
+            </ul>
+          </li>
+          <li><strong>Loopback Security Boundary:</strong> Host actions (<code>/api/outbound/register</code>, <code>DELETE /api/outbound/:id</code>, <code>/api/open-folder</code>, <code>/api/open-file</code>, <code>/api/qr/popup</code>, <code>/api/shutdown</code>) strictly reject remote sockets with HTTP <code>403</code>.</li>
+          <li><strong>PID-Safe Shutdown:</strong> Terminates only uDrop's own PID stored in <code>%USERPROFILE%\.udrop\engine.pid</code>.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Troubleshooting -->
+      <section id="troubleshooting" class="doc-section">
+        <h2>13. Troubleshooting</h2>
+        <ul>
+          <li><strong>Phone cannot reach <code>.local</code> address:</strong> Click <strong>Use IP</strong> on the Glass QR Overlay to encode your direct LAN IPv4 address (<code>http://192.168.x.x:4040</code>).</li>
+          <li><strong>Connection blocked on Windows:</strong> Set your Wi-Fi network profile to <strong>Private</strong> and click <strong>Allow access</strong> if Windows Defender Firewall prompts on first transfer.</li>
+          <li><strong>Public / Hotel Wi-Fi blocks peer traffic:</strong> Switch to direct hotspot mode using <code>udrop --hotspot</code> or connect via mobile hotspot.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Uninstall -->
+      <section id="uninstall" class="doc-section">
+        <h2>14. Complete Uninstallation</h2>
+        <p>Run <code>uninstall.bat</code> inside your install directory (default <code>%LOCALAPPDATA%\uDrop\uninstall.bat</code>) to:</p>
+        <ol>
+          <li>Cleanly execute <code>udrop.exe --stop</code> and exit tray processes.</li>
+          <li>Delete <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run\uDrop</code> and <code>HKCU\Software\Classes\*\shell\uDropShare</code>.</li>
+          <li>Remove Desktop/Start Menu shortcuts and application binaries (received files in <code>Downloads\uDrop</code> stay untouched).</li>
+        </ol>
+      </section>
+
+      <!-- Section: Build -->
+      <section id="build-source" class="doc-section">
+        <h2>15. Building, Testing &amp; Embedding (<code>@uxiom/udrop</code>)</h2>
+        <div class="code-block">
+          <div class="code-top">
+            <span>PowerShell / Shell</span>
+            <button class="copy-btn" type="button">Copy</button>
+          </div>
+          <pre># Run cross-platform core, mesh, and daemon tests
+npm test
+
+# Bundle web assets and compile udrop.exe + udrop-setup.exe + portable ZIP (Windows)
+.\installer\build-windows.ps1 -CreatePortableZip
+
+# Execute native Windows binary &amp; live EXE verification suite
+npm run test:win</pre>
+        </div>
+        <p>Open-source developers can also import <code>startServer</code>, <code>registerOutboundFile</code>, <code>getMeshRing</code>, and <code>generateSleekQrSvg</code> directly from <code>@uxiom/udrop</code> and its subpaths under GPL-3.0.</p>
+      </section>
+
+      <!-- Section: Support & Contact -->
+      <section id="support" class="doc-section">
+        <h2>16. Support, Licensing &amp; Contact</h2>
+        <p>
+          uDrop is dual-licensed: open-source under <strong>GNU General Public License v3.0 (GPL-3.0)</strong>, with separate commercial licensing available for closed-source or proprietary commercial integrations.
+        </p>
+        <ul>
+          <li><strong>Creator &amp; Maintainer:</strong> <a href="https://github.com/vd1686" target="_blank" rel="noopener">@vd1686</a> (<a href="https://github.com/Uxiom" target="_blank" rel="noopener">Uxiom</a>)</li>
+          <li><strong>Open Source License:</strong> <a href="https://github.com/Uxiom/udrop/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPL v3.0</a></li>
+          <li><strong>Commercial / Closed-Source Inquiries &amp; Support:</strong> <a href="mailto:uxiom.support@gmail.com">uxiom.support@gmail.com</a></li>
+          <li><strong>GitHub Issues:</strong> <a href="https://github.com/Uxiom/udrop/issues" target="_blank" rel="noopener">https://github.com/Uxiom/udrop/issues</a></li>
+          <li><strong>Source Repository:</strong> <a href="https://github.com/Uxiom/udrop" target="_blank" rel="noopener">https://github.com/Uxiom/udrop</a></li>
+        </ul>
+      </section>
+
+      <footer class="site-footer">
+        <span class="uxiom-footer-brand"><img src="uxiom-light.svg" alt="Uxiom" class="uxiom-footer-mark"><span>uDrop — Zero-Router P2P File Transfer (GNU GPL v3.0 / Commercial Dual License)</span></span>
+        <span>Support: <a href="mailto:uxiom.support@gmail.com">uxiom.support@gmail.com</a></span>
+      </footer>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
