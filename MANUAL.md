@@ -8,7 +8,7 @@ uDrop allows you to beam uncompressed 4K videos, full-resolution photos, documen
 
 ## 1. Quick Installation (Zero Terminal Setup)
 
-uDrop is designed to run seamlessly in the background just like AirDrop on macOS or Quick Share on Android. You do not need to open a command prompt or configure a server to use it.
+uDrop is designed to run quietly in the background with one-click system tray ergonomics. You do not need to open a command prompt or configure a server to use it.
 
 ### Method A: Standalone Windows Installer (`uDrop-Setup.exe`)
 1. Download **`uDrop-Setup.exe`** from **[GitHub Releases](https://github.com/Uxiom/udrop/releases/latest)**. It is a single self-contained installer packaging the portable runtime and tray controller.
