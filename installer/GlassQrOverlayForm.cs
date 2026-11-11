@@ -36,16 +36,30 @@ namespace UDrop {
             public int SizeOfData;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MARGINS {
+            public int cxLeftWidth;
+            public int cxRightWidth;
+            public int cyTopHeight;
+            public int cyBottomHeight;
+        }
+
         [DllImport("user32.dll")]
         private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
         private const int WCA_ACCENT_POLICY = 19;
         private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
         private const int DWMWCP_ROUND = 2;
+        private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+        private const int DWMSBT_TRANSIENTWINDOW = 3; // True Windows 11 Acrylic frosted glass
 
         private struct QrParticle {
             public int R;
@@ -166,13 +180,13 @@ namespace UDrop {
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Size = new Size(388, 530);
-            this.BackColor = Color.FromArgb(14, 14, 18);
+            // Pure black lets Windows DWM AcrylicBlurBehind show real frosted desktop translucency behind controls
+            this.BackColor = Color.Black;
             this.ForeColor = Color.FromArgb(250, 250, 250);
             this.TopMost = true;
             this.ShowInTaskbar = false;
             this.KeyPreview = true;
             this.AllowDrop = true;
-            this.Opacity = 0.96;
             this.DoubleBuffered = true;
 
             this.KeyDown += (s, e) => {
@@ -201,6 +215,7 @@ namespace UDrop {
                 Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(250, 250, 250),
                 BackColor = Color.Transparent,
+                UseCompatibleTextRendering = true,
                 AutoSize = true,
                 Location = new Point(22, 16)
             };
@@ -211,6 +226,7 @@ namespace UDrop {
                 Font = new Font("Segoe UI", 7.75f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(74, 222, 128),
                 BackColor = Color.Transparent,
+                UseCompatibleTextRendering = true,
                 AutoSize = true,
                 Location = new Point(23, 41)
             };
@@ -256,7 +272,7 @@ namespace UDrop {
             qrCanvasPanel = new DoubleBufferedPanel {
                 Location = new Point(54, 34),
                 Size = new Size(280, 280),
-                BackColor = Color.FromArgb(250, 250, 250),
+                BackColor = Color.Black,
                 AllowDrop = true
             };
             qrCanvasPanel.Paint += OnQrCanvasPaint;
@@ -266,8 +282,9 @@ namespace UDrop {
             lblQrStatus = new Label {
                 Text = "Point iPhone or Android camera to connect",
                 Font = new Font("Segoe UI", 8.75f, FontStyle.Regular),
-                ForeColor = Color.FromArgb(212, 212, 216),
+                ForeColor = Color.FromArgb(228, 228, 231),
                 BackColor = Color.Transparent,
+                UseCompatibleTextRendering = true,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Location = new Point(24, 326),
                 Size = new Size(340, 22)
@@ -276,8 +293,9 @@ namespace UDrop {
             lblUrl = new Label {
                 Text = string.Format("http://localhost:{0}", port),
                 Font = new Font("Consolas", 8.75f, FontStyle.Regular),
-                ForeColor = Color.FromArgb(161, 161, 170),
+                ForeColor = Color.FromArgb(184, 184, 196),
                 BackColor = Color.Transparent,
+                UseCompatibleTextRendering = true,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Location = new Point(24, 356),
                 Size = new Size(254, 24)
@@ -337,8 +355,9 @@ namespace UDrop {
             lblDropHint = new Label {
                 Text = "Live Transfers & Outbound Files  (Drop files anywhere to share)",
                 Font = new Font("Segoe UI", 8f, FontStyle.Regular),
-                ForeColor = Color.FromArgb(161, 161, 170),
+                ForeColor = Color.FromArgb(180, 180, 190),
                 BackColor = Color.Transparent,
+                UseCompatibleTextRendering = true,
                 Location = new Point(20, 40),
                 Size = new Size(348, 18)
             };
@@ -346,7 +365,7 @@ namespace UDrop {
             feedCanvasPanel = new DoubleBufferedPanel {
                 Location = new Point(20, 62),
                 Size = new Size(348, 330),
-                BackColor = Color.FromArgb(18, 18, 24),
+                BackColor = Color.Black,
                 AllowDrop = true
             };
             feedCanvasPanel.Paint += OnFeedCanvasPaint;
@@ -410,12 +429,13 @@ namespace UDrop {
                 Location = loc,
                 Size = size,
                 FlatStyle = FlatStyle.Flat,
+                UseCompatibleTextRendering = true,
                 BackColor = Color.FromArgb(24, 24, 30),
                 ForeColor = Color.FromArgb(228, 228, 231),
                 Font = new Font("Segoe UI", 8.25f, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
-            b.FlatAppearance.BorderColor = Color.FromArgb(46, 46, 56);
+            b.FlatAppearance.BorderColor = Color.FromArgb(62, 62, 76);
             b.FlatAppearance.BorderSize = 1;
             return b;
         }
@@ -426,6 +446,7 @@ namespace UDrop {
                 Location = loc,
                 Size = size,
                 FlatStyle = FlatStyle.Flat,
+                UseCompatibleTextRendering = true,
                 BackColor = Color.FromArgb(250, 250, 250),
                 ForeColor = Color.FromArgb(9, 9, 11),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
@@ -442,15 +463,34 @@ namespace UDrop {
 
         private void ApplyGlassEffect() {
             try {
+                int darkMode = 1;
+                DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
                 int pref = DWMWCP_ROUND;
                 DwmSetWindowAttribute(this.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
             } catch {}
 
             try {
+                MARGINS margins = new MARGINS {
+                    cxLeftWidth = -1,
+                    cxRightWidth = -1,
+                    cyTopHeight = -1,
+                    cyBottomHeight = -1
+                };
+                DwmExtendFrameIntoClientArea(this.Handle, ref margins);
+
+                int backdrop = DWMSBT_TRANSIENTWINDOW;
+                int hr = DwmSetWindowAttribute(this.Handle, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+                if (hr == 0) {
+                    return;
+                }
+            } catch {}
+
+            // Windows 10 fallback: SetWindowCompositionAttribute Acrylic BlurBehind
+            try {
                 AccentPolicy accent = new AccentPolicy {
                     AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND,
                     AccentFlags = 2,
-                    GradientColor = unchecked((int)0xD20B0909),
+                    GradientColor = unchecked((int)0x94161412),
                     AnimationId = 0
                 };
                 int size = Marshal.SizeOf(accent);
@@ -467,7 +507,7 @@ namespace UDrop {
                     Marshal.FreeHGlobal(ptr);
                 }
             } catch {
-                this.Opacity = 0.95;
+                this.Opacity = 0.94;
             }
         }
 
@@ -815,18 +855,22 @@ namespace UDrop {
         private void OnQrCanvasPaint(object sender, PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.FromArgb(250, 250, 250));
+            g.Clear(Color.Black);
+
+            Rectangle glassBounds = new Rectangle(3, 3, qrCanvasPanel.Width - 7, qrCanvasPanel.Height - 7);
+            DrawLiquidGlassCard(g, glassBounds, 24f, true);
 
             if (particles.Count == 0 || qrSize <= 0) {
                 using (Font f = new Font("Segoe UI", 9f, FontStyle.Regular))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(113, 113, 122))) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(161, 161, 170))) {
                     StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString("Collecting modules...", f, b, qrCanvasPanel.ClientRectangle, sf);
                 }
+                DrawLiquidGlassRim(g, glassBounds, 24f, true);
                 return;
             }
 
-            int pad = 16;
+            int pad = 22;
             int drawArea = Math.Min(qrCanvasPanel.Width, qrCanvasPanel.Height) - (pad * 2);
             double cell = (double)drawArea / qrSize;
             double maxScatter = drawArea * 0.55;
@@ -852,7 +896,16 @@ namespace UDrop {
                 float ox = (float)(px + (cell - drawSize) * 0.5);
                 float oy = (float)(py + (cell - drawSize) * 0.5);
 
-                using (SolidBrush br = new SolidBrush(Color.FromArgb(alpha, 9, 9, 11))) {
+                // Subtle white optical glow halo on etched Liquid Glass QR modules
+                if (eased > 0.22) {
+                    int haloAlpha = Math.Max(0, Math.Min(42, (int)(eased * 34.0)));
+                    float haloPad = 1.6f;
+                    using (SolidBrush halo = new SolidBrush(Color.FromArgb(haloAlpha, 255, 255, 255))) {
+                        g.FillRectangle(halo, ox - haloPad, oy - haloPad, drawSize + haloPad * 2f, drawSize + haloPad * 2f);
+                    }
+                }
+
+                using (SolidBrush br = new SolidBrush(Color.FromArgb(alpha, 250, 250, 255))) {
                     g.FillRectangle(br, ox, oy, drawSize, drawSize);
                 }
             }
@@ -860,22 +913,24 @@ namespace UDrop {
             if (animDir == -1 && t <= 0.35) {
                 int msgAlpha = Math.Max(0, Math.Min(255, (int)(((0.35 - t) / 0.35) * 255.0)));
                 using (Font f = new Font("Segoe UI", 10f, FontStyle.Bold))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(msgAlpha, 9, 9, 11))) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(msgAlpha, 250, 250, 250))) {
                     StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString(dismantleCenterText, f, b, qrCanvasPanel.ClientRectangle, sf);
                 }
             }
+
+            DrawLiquidGlassRim(g, glassBounds, 24f, true);
         }
 
         private void OnFeedCanvasPaint(object sender, PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.FromArgb(18, 18, 24));
+            g.Clear(Color.Black);
             feedHits.Clear();
 
-            using (Pen borderPen = new Pen(Color.FromArgb(40, 40, 50), 1f)) {
-                g.DrawRectangle(borderPen, 0, 0, feedCanvasPanel.Width - 1, feedCanvasPanel.Height - 1);
-            }
+            Rectangle feedRect = new Rectangle(1, 1, feedCanvasPanel.Width - 3, feedCanvasPanel.Height - 3);
+            DrawLiquidGlassCard(g, feedRect, 14f, false);
+            DrawLiquidGlassRim(g, feedRect, 14f, false);
 
             int y = 10;
             int w = feedCanvasPanel.Width - 20;
@@ -1139,12 +1194,100 @@ namespace UDrop {
             }
         }
 
+        private static GraphicsPath CreateRoundedRectPath(Rectangle bounds, float radius) {
+            GraphicsPath path = new GraphicsPath();
+            float d = radius * 2f;
+            if (d > bounds.Width) d = bounds.Width;
+            if (d > bounds.Height) d = bounds.Height;
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static void DrawSpecularGlint(Graphics g, float cx, float cy, float rx, float ry, int peakAlpha) {
+            RectangleF rect = new RectangleF(cx - rx, cy - ry, rx * 2f, ry * 2f);
+            using (GraphicsPath gp = new GraphicsPath()) {
+                gp.AddEllipse(rect);
+                using (PathGradientBrush pgb = new PathGradientBrush(gp)) {
+                    pgb.CenterColor = Color.FromArgb(peakAlpha, 255, 255, 255);
+                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                    g.FillPath(pgb, gp);
+                }
+            }
+        }
+
+        private static void DrawLiquidGlassCard(Graphics g, Rectangle bounds, float radius, bool withDiagonalSheen) {
+            using (GraphicsPath cardPath = CreateRoundedRectPath(bounds, radius)) {
+                using (LinearGradientBrush bodyBrush = new LinearGradientBrush(
+                    new Point(bounds.Left, bounds.Top),
+                    new Point(bounds.Right, bounds.Bottom),
+                    Color.FromArgb(245, 24, 25, 32),
+                    Color.FromArgb(250, 10, 11, 15))) {
+                    g.FillPath(bodyBrush, cardPath);
+                }
+
+                if (withDiagonalSheen) {
+                    GraphicsState saved = g.Save();
+                    g.SetClip(cardPath);
+                    PointF[] sheenPoly = new PointF[] {
+                        new PointF(bounds.Left, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.42f, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.72f, bounds.Bottom),
+                        new PointF(bounds.Left + bounds.Width * 0.14f, bounds.Bottom)
+                    };
+                    using (LinearGradientBrush sheen = new LinearGradientBrush(
+                        new PointF(bounds.Left, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.65f, bounds.Bottom * 0.85f),
+                        Color.FromArgb(36, 255, 255, 255),
+                        Color.FromArgb(0, 255, 255, 255))) {
+                        g.FillPolygon(sheen, sheenPoly);
+                    }
+                    g.Restore(saved);
+                }
+            }
+        }
+
+        private static void DrawLiquidGlassRim(Graphics g, Rectangle bounds, float radius, bool drawCornerFlares) {
+            using (GraphicsPath outerPath = CreateRoundedRectPath(bounds, radius)) {
+                using (LinearGradientBrush rimGrad = new LinearGradientBrush(
+                    new Point(bounds.Left, bounds.Top),
+                    new Point(bounds.Right, bounds.Bottom),
+                    Color.FromArgb(190, 255, 255, 255),
+                    Color.FromArgb(150, 210, 218, 232))) {
+                    ColorBlend cb = new ColorBlend(3);
+                    cb.Colors = new Color[] {
+                        Color.FromArgb(195, 255, 255, 255),
+                        Color.FromArgb(52, 160, 168, 185),
+                        Color.FromArgb(185, 240, 244, 255)
+                    };
+                    cb.Positions = new float[] { 0.0f, 0.48f, 1.0f };
+                    rimGrad.InterpolationColors = cb;
+                    using (Pen rimPen = new Pen(rimGrad, 1.6f)) {
+                        g.DrawPath(rimPen, outerPath);
+                    }
+                }
+            }
+
+            Rectangle inner = new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2);
+            using (GraphicsPath innerPath = CreateRoundedRectPath(inner, Math.Max(4f, radius - 1f)))
+            using (Pen innerPen = new Pen(Color.FromArgb(40, 255, 255, 255), 1f)) {
+                g.DrawPath(innerPen, innerPath);
+            }
+
+            if (drawCornerFlares) {
+                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.74f, bounds.Top + 1f, 36f, 9f, 165);
+                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.24f, bounds.Bottom - 1f, 38f, 9f, 155);
+            }
+        }
+
         private void OnFormPaint(object sender, PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (Pen borderPen = new Pen(Color.FromArgb(52, 52, 64), 1f)) {
-                g.DrawRectangle(borderPen, 0, 0, this.Width - 1, this.Height - 1);
-            }
+            Rectangle outerRect = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
+            DrawLiquidGlassRim(g, outerRect, 14f, true);
         }
 
         private void OnHeaderMouseDown(object sender, MouseEventArgs e) {

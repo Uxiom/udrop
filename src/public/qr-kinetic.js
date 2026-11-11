@@ -1,28 +1,46 @@
 (function (global) {
   const THEMES = {
     obsidian: {
-      cardBg: '#09090B',
+      cardBgTop: '#1A1C23',
+      cardBgBot: '#09090D',
       cardFg: '#FAFAFA',
-      qrBg: '#FAFAFA',
-      qrFg: '#09090B',
+      qrBgTop: '#161820',
+      qrBgBot: '#0B0C10',
+      qrFg: '#FAFAFA',
+      qrGlow: 'rgba(255, 255, 255, 0.24)',
       sub: '#A1A1AA',
-      border: 'rgba(255, 255, 255, 0.14)'
+      rimHi: 'rgba(255, 255, 255, 0.55)',
+      rimMid: 'rgba(180, 190, 210, 0.14)',
+      sheenStart: 'rgba(255, 255, 255, 0.14)',
+      flare: true
     },
     titanium: {
-      cardBg: '#27272A',
+      cardBgTop: '#2E2E36',
+      cardBgBot: '#1B1B20',
       cardFg: '#FAFAFA',
-      qrBg: '#FAFAFA',
+      qrBgTop: '#FAFAFA',
+      qrBgBot: '#EFEFF2',
       qrFg: '#09090B',
+      qrGlow: 'rgba(0, 0, 0, 0)',
       sub: '#D4D4D8',
-      border: 'rgba(255, 255, 255, 0.18)'
+      rimHi: 'rgba(255, 255, 255, 0.42)',
+      rimMid: 'rgba(255, 255, 255, 0.12)',
+      sheenStart: 'rgba(255, 255, 255, 0.11)',
+      flare: true
     },
     paper: {
-      cardBg: '#FAFAFA',
+      cardBgTop: '#FFFFFF',
+      cardBgBot: '#F2F2F5',
       cardFg: '#09090B',
-      qrBg: '#09090B',
+      qrBgTop: '#0B0C10',
+      qrBgBot: '#09090B',
       qrFg: '#FAFAFA',
+      qrGlow: 'rgba(255, 255, 255, 0.2)',
       sub: '#52525B',
-      border: 'rgba(9, 9, 11, 0.16)'
+      rimHi: 'rgba(9, 9, 11, 0.22)',
+      rimMid: 'rgba(9, 9, 11, 0.08)',
+      sheenStart: 'rgba(255, 255, 255, 0.35)',
+      flare: false
     }
   };
 
@@ -116,12 +134,35 @@
       const theme = THEMES[currentTheme] || THEMES.obsidian;
       ctx.clearRect(0, 0, cssW, cssH);
 
-      // Outer Card Surface
+      function drawSpecularFlare(fx, fy, rx) {
+        const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, rx);
+        g.addColorStop(0, 'rgba(255, 255, 255, 0.72)');
+        g.addColorStop(0.45, 'rgba(255, 255, 255, 0.18)');
+        g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.scale(1, 0.28);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, rx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Outer Frosted Glass Card Surface
       drawRoundedRect(ctx, 1, 1, cssW - 2, cssH - 2, 22);
-      ctx.fillStyle = theme.cardBg;
+      const outerFill = ctx.createLinearGradient(0, 0, cssW, cssH);
+      outerFill.addColorStop(0, theme.cardBgTop);
+      outerFill.addColorStop(1, theme.cardBgBot);
+      ctx.fillStyle = outerFill;
       ctx.fill();
-      ctx.strokeStyle = theme.border;
-      ctx.lineWidth = 1.2;
+
+      const outerRim = ctx.createLinearGradient(0, 0, cssW, cssH);
+      outerRim.addColorStop(0, theme.rimHi);
+      outerRim.addColorStop(0.5, theme.rimMid);
+      outerRim.addColorStop(1, theme.rimHi);
+      ctx.strokeStyle = outerRim;
+      ctx.lineWidth = 1.4;
       ctx.stroke();
 
       // Header Branding
@@ -134,29 +175,47 @@
       ctx.font = '800 22px ui-sans-serif, system-ui, -apple-system, sans-serif';
       ctx.fillText('uDrop', 22, 36);
 
-      // QR Well
+      // Liquid Glass QR Well
       const qrBoxPad = 24;
       const qrBoxSize = Math.min(cssW - qrBoxPad * 2, cssH - 140);
       const qrBoxX = (cssW - qrBoxSize) / 2;
       const qrBoxY = 78;
 
       ctx.save();
-      drawRoundedRect(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 16);
-      ctx.fillStyle = theme.qrBg;
+      drawRoundedRect(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 20);
+      const qrFill = ctx.createLinearGradient(qrBoxX, qrBoxY, qrBoxX + qrBoxSize, qrBoxY + qrBoxSize);
+      qrFill.addColorStop(0, theme.qrBgTop);
+      qrFill.addColorStop(1, theme.qrBgBot);
+      ctx.fillStyle = qrFill;
       ctx.globalAlpha = animDir === -1 ? Math.max(0.08, t) : Math.min(1, 0.25 + t * 0.75);
       ctx.fill();
       ctx.clip();
+
+      // 32-deg diagonal glass light reflection across top-left face
+      const sheenGrad = ctx.createLinearGradient(qrBoxX, qrBoxY, qrBoxX + qrBoxSize * 0.65, qrBoxY + qrBoxSize * 0.85);
+      sheenGrad.addColorStop(0, theme.sheenStart);
+      sheenGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = sheenGrad;
+      ctx.beginPath();
+      ctx.moveTo(qrBoxX, qrBoxY);
+      ctx.lineTo(qrBoxX + qrBoxSize * 0.42, qrBoxY);
+      ctx.lineTo(qrBoxX + qrBoxSize * 0.72, qrBoxY + qrBoxSize);
+      ctx.lineTo(qrBoxX + qrBoxSize * 0.14, qrBoxY + qrBoxSize);
+      ctx.closePath();
+      ctx.fill();
 
       const cx = qrBoxX + qrBoxSize / 2;
       const cy = qrBoxY + qrBoxSize / 2;
 
       if (qrSize > 0 && particles.length > 0) {
-        const quiet = 16;
+        const quiet = 18;
         const inner = qrBoxSize - quiet * 2;
         const cell = inner / qrSize;
         const maxScatter = qrBoxSize * 0.52;
 
         ctx.fillStyle = theme.qrFg;
+        ctx.shadowColor = theme.qrGlow;
+        ctx.shadowBlur = 8;
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           const localRaw = Math.max(0, Math.min(1, (t - p.stagger) / (1 - 0.28)));
@@ -176,6 +235,7 @@
           const oy = py + (cell - drawW) * 0.5;
           ctx.fillRect(ox, oy, drawW, drawW);
         }
+        ctx.shadowBlur = 0;
       }
 
       if (statusBanner && t <= 0.25) {
@@ -190,6 +250,17 @@
       }
 
       ctx.restore();
+
+      // Chrome Rim + Specular Edge Glints on QR Well
+      drawRoundedRect(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 20);
+      ctx.strokeStyle = outerRim;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      if (theme.flare) {
+        drawSpecularFlare(qrBoxX + qrBoxSize * 0.74, qrBoxY, 34);
+        drawSpecularFlare(qrBoxX + qrBoxSize * 0.24, qrBoxY + qrBoxSize, 34);
+      }
 
       // Footer Address & Status
       ctx.fillStyle = theme.sub;
