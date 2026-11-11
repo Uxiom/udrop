@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>uDrop — Optical Pairing Card</title>
   <link rel="icon" type="image/svg+xml" href="assets/icon-brand.svg">
   <link rel="stylesheet" href="style.css">
@@ -67,13 +67,31 @@
     .theme-btn {
       background: transparent;
       border: none;
-      color: #9ca3af;
+      color: #A1A1AA;
       font-size: 12px;
       font-weight: 700;
+      min-height: 36px;
       padding: 6px 14px;
       border-radius: 100px;
       cursor: pointer;
       transition: all 0.2s;
+    }
+
+    @media (pointer: coarse), (max-width: 600px) {
+      .theme-btn,
+      .btn-action {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-wrapper {
+        animation: none;
+        transition: none;
+      }
     }
 
     .theme-btn:hover {

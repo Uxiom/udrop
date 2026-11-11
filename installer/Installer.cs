@@ -2,13 +2,150 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Diagnostics;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace UDropInstaller {
+    internal static class SetupDraw {
+        public static GraphicsPath RoundedRect(Rectangle bounds, float radius) {
+            GraphicsPath path = new GraphicsPath();
+            float d = radius * 2f;
+            if (d > bounds.Width) d = bounds.Width;
+            if (d > bounds.Height) d = bounds.Height;
+            if (d <= 0.5f) {
+                path.AddRectangle(bounds);
+                return path;
+            }
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+
+    internal class RoundedSetupButton : Button {
+        public bool IsPrimary { get; set; }
+        public bool IsSuccess { get; set; }
+        public Color CanvasBackColor { get; set; }
+        private bool isHovered = false;
+        private bool isPressed = false;
+
+        public RoundedSetupButton() {
+            CanvasBackColor = Color.FromArgb(18, 18, 22);
+            this.FlatStyle = FlatStyle.Flat;
+            this.TabStop = true;
+            this.Cursor = Cursors.Hand;
+            this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            this.UpdateStyles();
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { isHovered = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { isHovered = false; isPressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs mevent) { if (mevent.Button == MouseButtons.Left) { isPressed = true; Invalidate(); } base.OnMouseDown(mevent); }
+        protected override void OnMouseUp(MouseEventArgs mevent) { isPressed = false; Invalidate(); base.OnMouseUp(mevent); }
+        protected override void OnPaintBackground(PaintEventArgs pevent) {}
+
+        protected override void OnPaint(PaintEventArgs pevent) {
+            Graphics g = pevent.Graphics;
+            g.Clear(CanvasBackColor);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            Rectangle rect = new Rectangle(1, 1, Math.Max(4, this.Width - 3), Math.Max(4, this.Height - 3));
+            Color fillCol;
+            Color borderCol;
+            Color textCol;
+
+            if (IsSuccess) {
+                fillCol = isHovered ? Color.FromArgb(74, 222, 128) : Color.FromArgb(34, 197, 94);
+                borderCol = fillCol;
+                textCol = Color.FromArgb(9, 9, 11);
+            } else if (IsPrimary) {
+                fillCol = !this.Enabled
+                    ? Color.FromArgb(120, 120, 130)
+                    : (isPressed ? Color.FromArgb(212, 212, 216) : (isHovered ? Color.FromArgb(232, 232, 236) : Color.FromArgb(250, 250, 250)));
+                borderCol = fillCol;
+                textCol = Color.FromArgb(9, 9, 11);
+            } else {
+                fillCol = !this.Enabled
+                    ? Color.FromArgb(22, 22, 28)
+                    : (isPressed ? Color.FromArgb(44, 44, 54) : (isHovered ? Color.FromArgb(36, 36, 46) : Color.FromArgb(26, 26, 34)));
+                borderCol = (this.Focused && this.ShowFocusCues)
+                    ? Color.FromArgb(220, 250, 250, 250)
+                    : (isHovered ? Color.FromArgb(110, 110, 128) : Color.FromArgb(54, 54, 68));
+                textCol = this.Enabled ? Color.FromArgb(228, 228, 231) : Color.FromArgb(113, 113, 122);
+            }
+
+            using (GraphicsPath path = SetupDraw.RoundedRect(rect, 8f))
+            using (SolidBrush fb = new SolidBrush(fillCol))
+            using (Pen bp = new Pen(borderCol, (this.Focused && this.ShowFocusCues) ? 1.5f : 1f)) {
+                g.FillPath(fb, path);
+                g.DrawPath(bp, path);
+            }
+
+            StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
+            using (SolidBrush tb = new SolidBrush(textCol)) {
+                g.DrawString(this.Text ?? "", this.Font, tb, new RectangleF(4, 1, this.Width - 8, this.Height - 2), sf);
+            }
+        }
+    }
+
+    internal class DarkProgressBar : Control {
+        private int val = 0;
+        public int Minimum { get; set; }
+        public int Maximum { get; set; }
+        public int Value {
+            get { return val; }
+            set {
+                int clamped = Math.Max(Minimum, Math.Min(Maximum, value));
+                if (clamped != val) {
+                    val = clamped;
+                    Invalidate();
+                }
+            }
+        }
+
+        public DarkProgressBar() {
+            Minimum = 0;
+            Maximum = 100;
+            this.DoubleBuffered = true;
+            this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            this.UpdateStyles();
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.Clear(Color.FromArgb(14, 14, 18));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            Rectangle track = new Rectangle(0, 0, Math.Max(4, this.Width - 1), Math.Max(4, this.Height - 1));
+            float r = track.Height / 2f;
+            using (GraphicsPath tp = SetupDraw.RoundedRect(track, r))
+            using (SolidBrush tb = new SolidBrush(Color.FromArgb(30, 30, 38)))
+            using (Pen bp = new Pen(Color.FromArgb(52, 52, 64), 1f)) {
+                g.FillPath(tb, tp);
+                g.DrawPath(bp, tp);
+            }
+
+            double frac = Maximum > Minimum ? (double)(val - Minimum) / (Maximum - Minimum) : 0.0;
+            if (frac > 0.0) {
+                int fw = Math.Max(track.Height, (int)Math.Round(track.Width * frac));
+                Rectangle fillRect = new Rectangle(0, 0, Math.Min(track.Width, fw), track.Height);
+                Color fillCol = val >= Maximum ? Color.FromArgb(34, 197, 94) : Color.FromArgb(250, 250, 250);
+                using (GraphicsPath fp = SetupDraw.RoundedRect(fillRect, r))
+                using (SolidBrush fb = new SolidBrush(fillCol)) {
+                    g.FillPath(fb, fp);
+                }
+            }
+        }
+    }
     static class Program {
         [STAThread]
         static void Main(string[] args) {
@@ -19,6 +156,12 @@ namespace UDropInstaller {
     }
 
     public class InstallerForm : Form {
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
         // UI Controls
         private Panel headerPanel;
         private Label lblHeaderTitle;
@@ -29,7 +172,7 @@ namespace UDropInstaller {
         private Label lblLocationTitle;
         private Label lblLocationDesc;
         private TextBox txtInstallPath;
-        private Button btnBrowse;
+        private RoundedSetupButton btnBrowse;
         private Label lblOptionsTitle;
         private CheckBox chkStartup;
         private CheckBox chkDesktop;
@@ -41,15 +184,15 @@ namespace UDropInstaller {
         private Panel progressPanel;
         private Label lblProgressTitle;
         private Label lblProgressDetail;
-        private ProgressBar progressBar;
+        private DarkProgressBar progressBar;
         private ListBox lstLog;
 
         // Bottom Action Bar
         private Panel bottomPanel;
         private Panel separatorLine;
-        private Button btnActionPrimary;
-        private Button btnActionSecondary;
-        private Button btnOpenFolder;
+        private RoundedSetupButton btnActionPrimary;
+        private RoundedSetupButton btnActionSecondary;
+        private RoundedSetupButton btnOpenFolder;
 
         // State
         private bool isInstalling = false;
@@ -58,6 +201,16 @@ namespace UDropInstaller {
 
         public InstallerForm() {
             InitializeComponent();
+        }
+
+        protected override void OnHandleCreated(EventArgs e) {
+            base.OnHandleCreated(e);
+            try {
+                int darkMode = 1;
+                if (DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int)) != 0) {
+                    DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+                }
+            } catch {}
         }
 
         private void InitializeComponent() {
@@ -112,18 +265,16 @@ namespace UDropInstaller {
             };
             bottomPanel.Controls.Add(separatorLine);
 
-            btnOpenFolder = new Button {
+            btnOpenFolder = new RoundedSetupButton {
                 Text = "Open Folder",
-                Size = new Size(100, 32),
-                Location = new Point(24, 16),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(28, 28, 34),
-                ForeColor = Color.FromArgb(200, 200, 210),
-                Font = new Font("Segoe UI", 9f, FontStyle.Regular),
+                Size = new Size(104, 34),
+                Location = new Point(24, 14),
+                IsPrimary = false,
+                CanvasBackColor = Color.FromArgb(18, 18, 22),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 Visible = false,
-                Cursor = Cursors.Hand
+                AccessibleName = "Open Install Folder"
             };
-            btnOpenFolder.FlatAppearance.BorderColor = Color.FromArgb(50, 50, 60);
             btnOpenFolder.Click += (s, e) => {
                 if (Directory.Exists(finalInstallPath)) {
                     Process.Start("explorer.exe", finalInstallPath);
@@ -131,31 +282,27 @@ namespace UDropInstaller {
             };
             bottomPanel.Controls.Add(btnOpenFolder);
 
-            btnActionSecondary = new Button {
+            btnActionSecondary = new RoundedSetupButton {
                 Text = "Cancel",
-                Size = new Size(88, 32),
-                Location = new Point(366, 16),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(28, 28, 34),
-                ForeColor = Color.FromArgb(200, 200, 210),
+                Size = new Size(90, 34),
+                Location = new Point(362, 14),
+                IsPrimary = false,
+                CanvasBackColor = Color.FromArgb(18, 18, 22),
                 Font = new Font("Segoe UI", 9f, FontStyle.Regular),
-                Cursor = Cursors.Hand
+                AccessibleName = "Cancel Setup"
             };
-            btnActionSecondary.FlatAppearance.BorderColor = Color.FromArgb(50, 50, 60);
             btnActionSecondary.Click += (s, e) => this.Close();
             bottomPanel.Controls.Add(btnActionSecondary);
 
-            btnActionPrimary = new Button {
+            btnActionPrimary = new RoundedSetupButton {
                 Text = "Install",
-                Size = new Size(92, 32),
-                Location = new Point(462, 16),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(250, 250, 250),
-                ForeColor = Color.FromArgb(10, 10, 12),
+                Size = new Size(94, 34),
+                Location = new Point(460, 14),
+                IsPrimary = true,
+                CanvasBackColor = Color.FromArgb(18, 18, 22),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                AccessibleName = "Install uDrop"
             };
-            btnActionPrimary.FlatAppearance.BorderColor = Color.FromArgb(250, 250, 250);
             btnActionPrimary.Click += BtnActionPrimary_Click;
             bottomPanel.Controls.Add(btnActionPrimary);
 
@@ -193,17 +340,15 @@ namespace UDropInstaller {
                 Font = new Font("Segoe UI", 9.25f, FontStyle.Regular)
             };
 
-            btnBrowse = new Button {
+            btnBrowse = new RoundedSetupButton {
                 Text = "Browse...",
                 Location = new Point(450, 60),
                 Size = new Size(88, 28),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(32, 32, 38),
-                ForeColor = Color.FromArgb(250, 250, 250),
-                Font = new Font("Segoe UI", 8.75f, FontStyle.Regular),
-                Cursor = Cursors.Hand
+                IsPrimary = false,
+                CanvasBackColor = Color.FromArgb(14, 14, 18),
+                Font = new Font("Segoe UI", 8.75f, FontStyle.Bold),
+                AccessibleName = "Browse Installation Folder"
             };
-            btnBrowse.FlatAppearance.BorderColor = Color.FromArgb(60, 60, 72);
             btnBrowse.Click += (s, e) => {
                 using (FolderBrowserDialog fbd = new FolderBrowserDialog()) {
                     fbd.Description = "Select target installation directory for uDrop";
@@ -301,13 +446,12 @@ namespace UDropInstaller {
                 Location = new Point(23, 38)
             };
 
-            progressBar = new ProgressBar {
-                Location = new Point(24, 62),
-                Size = new Size(514, 14),
+            progressBar = new DarkProgressBar {
+                Location = new Point(24, 64),
+                Size = new Size(514, 10),
                 Minimum = 0,
                 Maximum = 100,
-                Value = 0,
-                Style = ProgressBarStyle.Continuous
+                Value = 0
             };
 
             lstLog = new ListBox {
@@ -532,7 +676,7 @@ namespace UDropInstaller {
                     using (RegistryKey uninstKey = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\uDrop")) {
                         if (uninstKey != null) {
                             uninstKey.SetValue("DisplayName", "uDrop");
-                            uninstKey.SetValue("DisplayVersion", "1.0.0");
+                            uninstKey.SetValue("DisplayVersion", "1.1.0");
                             uninstKey.SetValue("Publisher", "Uxiom");
                             uninstKey.SetValue("InstallLocation", targetDir);
                             uninstKey.SetValue("DisplayIcon", dstLauncher + ",0");
@@ -594,8 +738,8 @@ namespace UDropInstaller {
 
             btnActionPrimary.Text = "Finish";
             btnActionPrimary.Enabled = true;
-            btnActionPrimary.BackColor = Color.FromArgb(34, 197, 94);
-            btnActionPrimary.ForeColor = Color.FromArgb(10, 10, 12);
+            btnActionPrimary.IsSuccess = true;
+            btnActionPrimary.Invalidate();
 
             btnActionSecondary.Visible = false;
             btnOpenFolder.Visible = true;

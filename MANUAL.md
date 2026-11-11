@@ -42,7 +42,7 @@ npm install -g @uxiom/udrop
 1. Look for the **`[ U ]`** uDrop icon in your Windows Taskbar System Tray (notification area next to Wi-Fi and Bluetooth). It starts **OFF** at boot so zero background ports or streams stay open until needed.
 2. Click the tray icon (or press **`Ctrl + Shift + U`**) and switch uDrop **ON**.
 3. Particles assemble into a floating **Liquid Glass Kinetic QR Overlay** displaying a crisp QR code and local network URL (`http://<host>.local:4040` or LAN IP). Use **`Use IP` / `Use .local`** if your Android phone cannot resolve `.local` hostnames.
-4. Open the native **Camera** app on your iPhone or Android, scan the QR code, and tap the link to open uDrop in Safari or Chrome—zero mobile apps or accounts required. Once scanned, the QR pieces dismantle and morph into the **Live Transfer Overlay Dashboard**, showing live progress bars, `[Open]` buttons, drag-and-drop host sharing, and a **`Pair Device (QR)`** button if another phone joins later.
+4. Open the native **Camera** app on your iPhone or Android, scan the QR code, and tap the link to open uDrop in Safari or Chrome—zero mobile apps or accounts required. Once scanned, the QR pieces dismantle and morph into the **Live Hub** overlay (`Live Transfer & Share`), showing live progress bars, context-aware actions (`View` / `Play` / `Import` + `Dir`), drag-and-drop host sharing, and a **`Show QR`** toggle if another phone joins later.
 5. When finished, switch uDrop **OFF** (from the tray flyout, overlay **`Turn OFF`**, or **`Ctrl + Shift + U`**) to close port `4040` immediately.
 
 ### Sharing Files Directly from Windows File Explorer

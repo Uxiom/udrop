@@ -122,12 +122,12 @@
             <div id="previewOn" style="display:none;">
               <div class="preview-qr-box">
                 <svg class="preview-qr-svg" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect width="21" height="21" fill="#FAFAFA"/>
-                  <path fill="#09090B" d="M1,1 h7 v7 h-7 z M2,2 v5 h5 v-5 z M3,3 h3 v3 h-3 z M13,1 h7 v7 h-7 z M14,2 v5 h5 v-5 z M15,3 h3 v3 h-3 z M1,13 h7 v7 h-7 z M2,14 v5 h5 v-5 z M3,15 h3 v3 h-3 z M9,2 h2 v2 h-2 z M9,6 h2 v2 h-2 z M10,10 h3 v3 h-3 z M14,10 h2 v2 h-2 z M17,10 h3 v2 h-3 z M10,15 h2 v2 h-2 z M14,14 h3 v3 h-3 z M17,17 h3 v3 h-3 z"/>
+                  <rect width="21" height="21" rx="3" fill="#0D0E12"/>
+                  <path fill="#FAFAFA" d="M1,1 h7 v7 h-7 z M2,2 v5 h5 v-5 z M3,3 h3 v3 h-3 z M13,1 h7 v7 h-7 z M14,2 v5 h5 v-5 z M15,3 h3 v3 h-3 z M1,13 h7 v7 h-7 z M2,14 v5 h5 v-5 z M3,15 h3 v3 h-3 z M9,2 h2 v2 h-2 z M9,6 h2 v2 h-2 z M10,10 h3 v3 h-3 z M14,10 h2 v2 h-2 z M17,10 h3 v2 h-3 z M10,15 h2 v2 h-2 z M14,14 h3 v3 h-3 z M17,17 h3 v3 h-3 z"/>
                 </svg>
                 <div>
                   <p class="preview-status-title">Liquid Glass QR Overlay</p>
-                  <p class="preview-status-sub">http://your-pc.local:4040<br>Direct IP toggle &bull; Pin &bull; Turn OFF</p>
+                  <p class="preview-status-sub">http://your-pc.local:4040<br>Use IP toggle &bull; Copy URL &bull; Live Hub &bull; Turn OFF</p>
                 </div>
               </div>
             </div>
@@ -137,6 +137,13 @@
             <span id="previewFootState">Port 4040 Closed (~2 MB Tray)</span>
             <span>UI Simulation</span>
           </div>
+        </div>
+      </section>
+
+      <!-- Architecture & Context-Aware UI Showcase -->
+      <section class="showcase-section" aria-label="uDrop Architecture Preview">
+        <div class="card showcase-card">
+          <img src="udrop-preview.svg" alt="uDrop Liquid Glass QR, Context-Aware Mobile UI, and UXIOM Ring Mesh Architecture" class="showcase-img">
         </div>
       </section>
 
@@ -243,9 +250,9 @@ npm install -g @uxiom/udrop</pre>
         </p>
         <ul>
           <li><strong>Kinetic Assemble &rarr; Dismantle:</strong> Point your iPhone Camera or Android Camera app at the assembled QR code. Once paired, the QR pieces smoothly dismantle outward and morph directly into the <strong>Live Transfer Overlay Dashboard</strong>.</li>
-          <li><strong>Live Transfer Monitor:</strong> Track active uploads/downloads in real time, open completed files immediately, drag-and-drop host files to share (or unshare with <code>X</code>), and click <strong>Pair Device (QR)</strong> anytime to re-assemble the QR.</li>
+          <li><strong>Live Hub Monitor:</strong> Track active uploads/downloads in real time, act on received files with context verbs (<strong>View</strong> / <strong>Play</strong> / <strong>Import</strong> + <strong>Dir</strong>), drag-and-drop host files to share (or unshare with <code>X</code>), and click <strong>Show QR</strong> / <strong>Live Hub</strong> anytime to switch views.</li>
           <li><strong>Use IP / Use .local Switch:</strong> Toggle between mDNS hostname and direct IPv4 address if an Android device or router does not resolve <code>.local</code> hostnames.</li>
-          <li><strong>Pin / Minimize / Turn OFF:</strong> Pin topmost with <strong>Pin</strong>, minimize to tray via <kbd>Esc</kbd> or <code>X</code> (keeping uDrop active), or click <strong>Turn OFF</strong> to close port <code>4040</code>.</li>
+          <li><strong>Minimize / Turn OFF:</strong> Minimize the overlay to the tray via the top-right minimize button or <kbd>Esc</kbd> (keeping uDrop active), or click <strong>Turn OFF</strong> to close port <code>4040</code>.</li>
         </ul>
       </section>
 
@@ -256,7 +263,7 @@ npm install -g @uxiom/udrop</pre>
         <ol>
           <li>Right-click any video, photo, PDF, or archive in Windows File Explorer.</li>
           <li>Select <strong>Share via uDrop</strong>.</li>
-          <li>uDrop wakes the background engine (if OFF), registers the file over loopback HTTP, updates already-connected phones over Server-Sent Events, and displays the Liquid Glass QR Overlay labeled <code>Sharing: &lt;filename&gt;</code>.</li>
+          <li>uDrop wakes the background engine (if OFF), registers the file over loopback HTTP, updates already-connected phones over Server-Sent Events, and displays the Liquid Glass QR Overlay labeled <code>Ready to beam: &lt;filename&gt;</code>.</li>
         </ol>
       </section>
 

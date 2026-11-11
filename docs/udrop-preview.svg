@@ -60,25 +60,25 @@
     <rect x="184" y="198" width="14" height="16"/>
   </g>
   <text x="156" y="254" text-anchor="middle" fill="#D4D4D8" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10.5" font-weight="600">Scan to morph into Live Hub</text>
-  <text x="156" y="268" text-anchor="middle" fill="#71717A" font-family="ui-monospace, monospace" font-size="9.5">Downloads\uDrop</text>
+  <text x="156" y="268" text-anchor="middle" fill="#A1A1AA" font-family="ui-monospace, monospace" font-size="9.5">Downloads\uDrop</text>
 
   <!-- Center Arrow: Direct P2P Protocol -->
   <line x1="292" y1="168" x2="366" y2="168" stroke="#52525B" stroke-width="1.5" stroke-dasharray="4 4"/>
   <polygon points="366,164 374,168 366,172" fill="#FAFAFA"/>
   <text x="332" y="154" text-anchor="middle" fill="#FAFAFA" font-family="ui-monospace, monospace" font-size="10" font-weight="700">HTTP + SSE</text>
-  <text x="332" y="186" text-anchor="middle" fill="#71717A" font-family="ui-monospace, monospace" font-size="9">Range 206</text>
+  <text x="332" y="186" text-anchor="middle" fill="#A1A1AA" font-family="ui-monospace, monospace" font-size="9">Range 206</text>
 
   <!-- Card 2: Context-Aware Phone Browser PWA -->
   <rect x="386" y="58" width="248" height="222" rx="18" fill="#141418" stroke="#27272A" stroke-width="1.5"/>
   <text x="404" y="84" fill="#FAFAFA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13.5" font-weight="800">Phone Browser (No App)</text>
-  <text x="404" y="100" fill="#A1A1AA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="9.5">iPhone Safari  •  Android Chrome</text>
+  <text x="404" y="100" fill="#D4D4D8" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="9.5">iPhone Safari  •  Android Chrome</text>
 
   <!-- Row 1: Photo -->
   <rect x="402" y="114" width="216" height="44" rx="10" fill="#1C1C22" stroke="#27272A"/>
   <rect x="410" y="122" width="28" height="28" rx="6" fill="#27272A"/>
   <text x="424" y="140" text-anchor="middle" fill="#D4D4D8" font-family="ui-monospace, monospace" font-size="8.5" font-weight="800">IMG</text>
   <text x="446" y="133" fill="#FAFAFA" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700">IMG_4092.jpg</text>
-  <text x="446" y="147" fill="#71717A" font-family="system-ui, sans-serif" font-size="9">Save to Photos</text>
+  <text x="446" y="147" fill="#A1A1AA" font-family="system-ui, sans-serif" font-size="9">Save to Photos</text>
   <rect x="546" y="124" width="64" height="22" rx="6" fill="#FAFAFA"/>
   <text x="578" y="138" text-anchor="middle" fill="#09090B" font-family="system-ui, sans-serif" font-size="9.5" font-weight="800">Save Photo</text>
 
@@ -87,7 +87,7 @@
   <rect x="410" y="174" width="28" height="28" rx="6" fill="#27272A"/>
   <text x="424" y="192" text-anchor="middle" fill="#D4D4D8" font-family="ui-monospace, monospace" font-size="8.5" font-weight="800">VCF</text>
   <text x="446" y="185" fill="#FAFAFA" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700">team_card.vcf</text>
-  <text x="446" y="199" fill="#71717A" font-family="system-ui, sans-serif" font-size="9">Opens Contacts app</text>
+  <text x="446" y="199" fill="#A1A1AA" font-family="system-ui, sans-serif" font-size="9">Opens Contacts app</text>
   <rect x="544" y="176" width="66" height="22" rx="6" fill="#27272A" stroke="#3F3F46"/>
   <text x="577" y="190" text-anchor="middle" fill="#FAFAFA" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700">Add Contact</text>
 
@@ -96,24 +96,24 @@
   <rect x="410" y="226" width="28" height="28" rx="6" fill="#27272A"/>
   <text x="424" y="244" text-anchor="middle" fill="#D4D4D8" font-family="ui-monospace, monospace" font-size="8.5" font-weight="800">VID</text>
   <text x="446" y="237" fill="#FAFAFA" font-family="system-ui, sans-serif" font-size="10.5" font-weight="700">clip_4k_60fps.mov</text>
-  <text x="446" y="251" fill="#71717A" font-family="system-ui, sans-serif" font-size="9">Resumable chunk pipe</text>
+  <text x="446" y="251" fill="#A1A1AA" font-family="system-ui, sans-serif" font-size="9">Resumable chunk pipe</text>
   <rect x="556" y="228" width="54" height="22" rx="6" fill="#27272A" stroke="#3F3F46"/>
   <text x="583" y="242" text-anchor="middle" fill="#FAFAFA" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700">48 MB/s</text>
 
   <!-- Card 3: UXIOM 5-Node Ring Mesh -->
   <rect x="650" y="58" width="198" height="222" rx="18" fill="#141418" stroke="#27272A" stroke-width="1.5"/>
   <text x="668" y="84" fill="#FAFAFA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13.5" font-weight="800">UXIOM Ring Mesh</text>
-  <text x="668" y="100" fill="#A1A1AA" font-family="system-ui, sans-serif" font-size="9.5">Multi-Device Local Relay</text>
+  <text x="668" y="100" fill="#D4D4D8" font-family="system-ui, sans-serif" font-size="9.5">Multi-Device Local Relay</text>
 
   <g font-family="ui-monospace, monospace" font-size="11" font-weight="800">
-    <rect x="668" y="116" width="162" height="28" rx="8" fill="#1F2937" stroke="#3F3F46"/>
+    <rect x="668" y="116" width="162" height="28" rx="8" fill="#27272A" stroke="#3F3F46"/>
     <text x="680" y="134" fill="#4ADE80">[ U ]  Host PC</text>
     <rect x="668" y="150" width="162" height="28" rx="8" fill="#1C1C22" stroke="#27272A"/>
     <text x="680" y="168" fill="#FAFAFA">[ X ]  iPhone Safari</text>
     <rect x="668" y="184" width="162" height="28" rx="8" fill="#1C1C22" stroke="#27272A"/>
     <text x="680" y="202" fill="#FAFAFA">[ I ]  Android Chrome</text>
     <rect x="668" y="218" width="162" height="28" rx="8" fill="#1C1C22" stroke="#27272A"/>
-    <text x="680" y="236" fill="#A1A1AA">[ O ]  macOS / Linux</text>
+    <text x="680" y="236" fill="#D4D4D8">[ O ]  macOS / Linux</text>
   </g>
-  <text x="749" y="266" text-anchor="middle" fill="#71717A" font-family="system-ui, sans-serif" font-size="9.5">Loopback 403 Isolated Controls</text>
+  <text x="749" y="266" text-anchor="middle" fill="#A1A1AA" font-family="system-ui, sans-serif" font-size="9.5">Loopback 403 Isolated Controls</text>
 </svg>

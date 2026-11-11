@@ -12,11 +12,287 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace UDrop {
+    internal static class GlassDraw {
+        public static GraphicsPath CreateRoundedRectPath(Rectangle bounds, float radius) {
+            GraphicsPath path = new GraphicsPath();
+            float d = radius * 2f;
+            if (d > bounds.Width) d = bounds.Width;
+            if (d > bounds.Height) d = bounds.Height;
+            if (d <= 0.5f) {
+                path.AddRectangle(bounds);
+                return path;
+            }
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        public static void DrawSpecularGlint(Graphics g, float cx, float cy, float rx, float ry, int peakAlpha) {
+            RectangleF rect = new RectangleF(cx - rx, cy - ry, rx * 2f, ry * 2f);
+            using (GraphicsPath gp = new GraphicsPath()) {
+                gp.AddEllipse(rect);
+                using (PathGradientBrush pgb = new PathGradientBrush(gp)) {
+                    pgb.CenterColor = Color.FromArgb(peakAlpha, 255, 255, 255);
+                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                    g.FillPath(pgb, gp);
+                }
+            }
+        }
+
+        public static void DrawLiquidGlassCard(Graphics g, Rectangle bounds, float radius, bool withDiagonalSheen) {
+            using (GraphicsPath cardPath = CreateRoundedRectPath(bounds, radius)) {
+                using (LinearGradientBrush bodyBrush = new LinearGradientBrush(
+                    new Point(bounds.Left, bounds.Top),
+                    new Point(bounds.Right, bounds.Bottom),
+                    Color.FromArgb(245, 24, 25, 32),
+                    Color.FromArgb(250, 10, 11, 15))) {
+                    g.FillPath(bodyBrush, cardPath);
+                }
+
+                if (withDiagonalSheen) {
+                    GraphicsState saved = g.Save();
+                    g.SetClip(cardPath);
+                    PointF[] sheenPoly = new PointF[] {
+                        new PointF(bounds.Left, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.42f, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.72f, bounds.Bottom),
+                        new PointF(bounds.Left + bounds.Width * 0.14f, bounds.Bottom)
+                    };
+                    using (LinearGradientBrush sheen = new LinearGradientBrush(
+                        new PointF(bounds.Left, bounds.Top),
+                        new PointF(bounds.Left + bounds.Width * 0.65f, bounds.Bottom * 0.85f),
+                        Color.FromArgb(36, 255, 255, 255),
+                        Color.FromArgb(0, 255, 255, 255))) {
+                        g.FillPolygon(sheen, sheenPoly);
+                    }
+                    g.Restore(saved);
+                }
+            }
+        }
+
+        public static void DrawLiquidGlassRim(Graphics g, Rectangle bounds, float radius, bool drawCornerFlares) {
+            using (GraphicsPath outerPath = CreateRoundedRectPath(bounds, radius)) {
+                using (LinearGradientBrush rimGrad = new LinearGradientBrush(
+                    new Point(bounds.Left, bounds.Top),
+                    new Point(bounds.Right, bounds.Bottom),
+                    Color.FromArgb(190, 255, 255, 255),
+                    Color.FromArgb(150, 210, 218, 232))) {
+                    ColorBlend cb = new ColorBlend(3);
+                    cb.Colors = new Color[] {
+                        Color.FromArgb(195, 255, 255, 255),
+                        Color.FromArgb(52, 160, 168, 185),
+                        Color.FromArgb(185, 240, 244, 255)
+                    };
+                    cb.Positions = new float[] { 0.0f, 0.48f, 1.0f };
+                    rimGrad.InterpolationColors = cb;
+                    using (Pen rimPen = new Pen(rimGrad, 1.6f)) {
+                        g.DrawPath(rimPen, outerPath);
+                    }
+                }
+            }
+
+            Rectangle inner = new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2);
+            using (GraphicsPath innerPath = CreateRoundedRectPath(inner, Math.Max(4f, radius - 1f)))
+            using (Pen innerPen = new Pen(Color.FromArgb(40, 255, 255, 255), 1f)) {
+                g.DrawPath(innerPen, innerPath);
+            }
+
+            if (drawCornerFlares) {
+                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.74f, bounds.Top + 1f, 36f, 9f, 165);
+                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.24f, bounds.Bottom - 1f, 38f, 9f, 155);
+            }
+        }
+    }
+
     internal class DoubleBufferedPanel : Panel {
         public DoubleBufferedPanel() {
             this.DoubleBuffered = true;
             this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
             this.UpdateStyles();
+        }
+    }
+
+    internal class RoundedGlassButton : Button {
+        public bool IsPrimary { get; set; }
+        public bool IsMinimizeIcon { get; set; }
+        public float CornerRadius { get; set; }
+        public Color CanvasBackColor { get; set; }
+
+        private bool isHovered = false;
+        private bool isPressed = false;
+
+        public RoundedGlassButton() {
+            CornerRadius = 10f;
+            CanvasBackColor = Color.Black;
+            this.FlatStyle = FlatStyle.Flat;
+            this.TabStop = true;
+            this.Cursor = Cursors.Hand;
+            this.SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.UserPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true
+            );
+            this.UpdateStyles();
+        }
+
+        protected override void OnMouseEnter(EventArgs e) {
+            isHovered = true;
+            Invalidate();
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e) {
+            isHovered = false;
+            isPressed = false;
+            Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs mevent) {
+            if (mevent.Button == MouseButtons.Left) {
+                isPressed = true;
+                Invalidate();
+            }
+            base.OnMouseDown(mevent);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs mevent) {
+            isPressed = false;
+            Invalidate();
+            base.OnMouseUp(mevent);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs pevent) {
+            // Paint handled smoothly inside OnPaint
+        }
+
+        protected override void OnPaint(PaintEventArgs pevent) {
+            Graphics g = pevent.Graphics;
+            g.Clear(CanvasBackColor);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            Rectangle rect = new Rectangle(1, 1, Math.Max(4, this.Width - 3), Math.Max(4, this.Height - 3));
+            float r = Math.Min(CornerRadius, Math.Min(rect.Width, rect.Height) / 2f);
+
+            Color fillCol;
+            Color borderCol;
+            Color textCol;
+
+            if (IsPrimary) {
+                fillCol = !this.Enabled
+                    ? Color.FromArgb(140, 140, 148)
+                    : (isPressed ? Color.FromArgb(212, 212, 216) : (isHovered ? Color.FromArgb(232, 232, 236) : Color.FromArgb(250, 250, 250)));
+                borderCol = Color.FromArgb(255, 255, 255);
+                textCol = Color.FromArgb(9, 9, 11);
+            } else {
+                fillCol = isPressed
+                    ? Color.FromArgb(248, 46, 46, 58)
+                    : (isHovered ? Color.FromArgb(245, 34, 34, 44) : Color.FromArgb(240, 22, 22, 30));
+                borderCol = (this.Focused && this.ShowFocusCues)
+                    ? Color.FromArgb(220, 250, 250, 250)
+                    : (isHovered ? Color.FromArgb(130, 130, 152) : Color.FromArgb(62, 62, 76));
+                textCol = this.Enabled ? Color.FromArgb(244, 244, 245) : Color.FromArgb(113, 113, 122);
+            }
+
+            using (GraphicsPath path = GlassDraw.CreateRoundedRectPath(rect, r))
+            using (SolidBrush fill = new SolidBrush(fillCol))
+            using (Pen border = new Pen(borderCol, (this.Focused && this.ShowFocusCues) ? 1.5f : 1f)) {
+                g.FillPath(fill, path);
+                g.DrawPath(border, path);
+            }
+
+            if (IsPrimary && this.Focused && this.ShowFocusCues) {
+                Rectangle focusRect = new Rectangle(rect.X + 2, rect.Y + 2, Math.Max(2, rect.Width - 4), Math.Max(2, rect.Height - 4));
+                using (GraphicsPath fp = GlassDraw.CreateRoundedRectPath(focusRect, Math.Max(2f, r - 2f)))
+                using (Pen fpen = new Pen(Color.FromArgb(9, 9, 11), 1.25f)) {
+                    g.DrawPath(fpen, fp);
+                }
+            }
+
+            if (IsMinimizeIcon) {
+                int cx = this.Width / 2;
+                int cy = this.Height / 2;
+                using (Pen minPen = new Pen(isHovered ? Color.FromArgb(250, 250, 250) : Color.FromArgb(212, 212, 216), 2f)) {
+                    minPen.StartCap = LineCap.Round;
+                    minPen.EndCap = LineCap.Round;
+                    g.DrawLine(minPen, cx - 5, cy, cx + 5, cy);
+                }
+            } else {
+                StringFormat sf = new StringFormat {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
+                };
+                using (SolidBrush tb = new SolidBrush(textCol)) {
+                    g.DrawString(this.Text ?? "", this.Font, tb, new RectangleF(4, 1, this.Width - 8, this.Height - 2), sf);
+                }
+            }
+        }
+    }
+
+    internal class RoundedBannerLabel : Label {
+        public float CornerRadius { get; set; }
+        public Color PillBackColor { get; set; }
+        public Color PillBorderColor { get; set; }
+        public Color CanvasBackColor { get; set; }
+        public int HorizontalInset { get; set; }
+
+        public RoundedBannerLabel() {
+            CornerRadius = 9f;
+            PillBackColor = Color.FromArgb(242, 24, 24, 32);
+            PillBorderColor = Color.FromArgb(56, 56, 70);
+            CanvasBackColor = Color.Black;
+            HorizontalInset = 12;
+            this.AutoSize = false;
+            this.DoubleBuffered = true;
+            this.SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.UserPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true
+            );
+            this.UpdateStyles();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs pevent) {
+            // Paint handled smoothly inside OnPaint
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.Clear(CanvasBackColor);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            Rectangle rect = new Rectangle(1, 1, Math.Max(4, this.Width - 3), Math.Max(4, this.Height - 3));
+            float r = Math.Min(CornerRadius, Math.Min(rect.Width, rect.Height) / 2f);
+            using (GraphicsPath path = GlassDraw.CreateRoundedRectPath(rect, r))
+            using (SolidBrush fill = new SolidBrush(PillBackColor))
+            using (Pen border = new Pen(PillBorderColor, 1f)) {
+                g.FillPath(fill, path);
+                g.DrawPath(border, path);
+            }
+
+            StringFormat sf = new StringFormat {
+                Alignment = (this.TextAlign == ContentAlignment.MiddleCenter || this.TextAlign == ContentAlignment.TopCenter || this.TextAlign == ContentAlignment.BottomCenter)
+                    ? StringAlignment.Center
+                    : StringAlignment.Near,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap
+            };
+            RectangleF textBounds = new RectangleF(HorizontalInset, 0, Math.Max(8, this.Width - HorizontalInset * 2), this.Height);
+            using (SolidBrush tb = new SolidBrush(this.ForeColor)) {
+                g.DrawString(this.Text ?? "", this.Font, tb, textBounds, sf);
+            }
         }
     }
 
@@ -133,6 +409,8 @@ namespace UDrop {
         private List<CompletedTransferItem> completedItems = new List<CompletedTransferItem>();
         private List<OutboundFileItem> outboundItems = new List<OutboundFileItem>();
         private List<FeedHitRegion> feedHits = new List<FeedHitRegion>();
+        private int hoveredHitIndex = -1;
+        private int focusedHitIndex = -1;
 
         // Drag Window State
         private bool dragging = false;
@@ -243,7 +521,15 @@ namespace UDrop {
                 }
             };
 
-            btnMinimize = CreateGhostButton("_", new Point(342, 18), new Size(28, 28));
+            btnMinimize = new RoundedGlassButton {
+                Text = "Minimize",
+                IsMinimizeIcon = true,
+                CornerRadius = 9f,
+                Location = new Point(342, 18),
+                Size = new Size(28, 28),
+                AccessibleName = "Minimize to Tray",
+                AccessibleDescription = "Hide overlay to taskbar tray (Esc)"
+            };
             btnMinimize.Click += (s, e) => HideOverlay();
 
             // =================================================================
@@ -258,11 +544,13 @@ namespace UDrop {
             panelQrView.DragEnter += OnOverlayDragEnter;
             panelQrView.DragDrop += OnOverlayDragDrop;
 
-            lblSharedFile = new Label {
+            lblSharedFile = new RoundedBannerLabel {
                 Text = "",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(250, 250, 250),
-                BackColor = Color.FromArgb(28, 28, 36),
+                PillBackColor = Color.FromArgb(242, 26, 26, 34),
+                PillBorderColor = Color.FromArgb(66, 66, 82),
+                CornerRadius = 9f,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Location = new Point(24, 4),
                 Size = new Size(340, 24),
@@ -341,13 +629,15 @@ namespace UDrop {
             panelDashboardView.DragEnter += OnOverlayDragEnter;
             panelDashboardView.DragDrop += OnOverlayDragDrop;
 
-            lblMeshStrip = new Label {
+            lblMeshStrip = new RoundedBannerLabel {
                 Text = connectedNodesSummary,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(228, 228, 231),
-                BackColor = Color.FromArgb(24, 24, 30),
+                ForeColor = Color.FromArgb(236, 236, 240),
+                PillBackColor = Color.FromArgb(242, 22, 22, 30),
+                PillBorderColor = Color.FromArgb(56, 56, 70),
+                CornerRadius = 9f,
+                HorizontalInset = 12,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(10, 0, 10, 0),
                 Location = new Point(20, 4),
                 Size = new Size(348, 30)
             };
@@ -366,11 +656,38 @@ namespace UDrop {
                 Location = new Point(20, 62),
                 Size = new Size(348, 330),
                 BackColor = Color.Black,
-                AllowDrop = true
+                AllowDrop = true,
+                TabStop = true,
+                AccessibleName = "Live Transfer Activity Feed"
             };
             feedCanvasPanel.Paint += OnFeedCanvasPaint;
             feedCanvasPanel.MouseClick += OnFeedCanvasClick;
             feedCanvasPanel.MouseMove += OnFeedCanvasMouseMove;
+            feedCanvasPanel.MouseLeave += (s, e) => {
+                if (hoveredHitIndex != -1) {
+                    hoveredHitIndex = -1;
+                    feedCanvasPanel.Cursor = Cursors.Default;
+                    feedCanvasPanel.Invalidate();
+                }
+            };
+            feedCanvasPanel.GotFocus += (s, e) => {
+                if (feedHits.Count > 0 && focusedHitIndex < 0) {
+                    focusedHitIndex = 0;
+                    feedCanvasPanel.Invalidate();
+                }
+            };
+            feedCanvasPanel.LostFocus += (s, e) => {
+                if (focusedHitIndex != -1) {
+                    focusedHitIndex = -1;
+                    feedCanvasPanel.Invalidate();
+                }
+            };
+            feedCanvasPanel.PreviewKeyDown += (s, e) => {
+                if (e.KeyCode == Keys.Up || e.KeyCode == Keys.Down || e.KeyCode == Keys.Left || e.KeyCode == Keys.Right) {
+                    e.IsInputKey = true;
+                }
+            };
+            feedCanvasPanel.KeyDown += OnFeedCanvasKeyDown;
             feedCanvasPanel.DragEnter += OnOverlayDragEnter;
             feedCanvasPanel.DragDrop += OnOverlayDragDrop;
 
@@ -424,36 +741,27 @@ namespace UDrop {
         }
 
         private Button CreateGhostButton(string text, Point loc, Size size) {
-            Button b = new Button {
+            return new RoundedGlassButton {
                 Text = text,
                 Location = loc,
                 Size = size,
-                FlatStyle = FlatStyle.Flat,
-                UseCompatibleTextRendering = true,
-                BackColor = Color.FromArgb(24, 24, 30),
-                ForeColor = Color.FromArgb(228, 228, 231),
+                IsPrimary = false,
+                CornerRadius = 9f,
                 Font = new Font("Segoe UI", 8.25f, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                AccessibleName = text
             };
-            b.FlatAppearance.BorderColor = Color.FromArgb(62, 62, 76);
-            b.FlatAppearance.BorderSize = 1;
-            return b;
         }
 
         private Button CreatePrimaryButton(string text, Point loc, Size size) {
-            Button b = new Button {
+            return new RoundedGlassButton {
                 Text = text,
                 Location = loc,
                 Size = size,
-                FlatStyle = FlatStyle.Flat,
-                UseCompatibleTextRendering = true,
-                BackColor = Color.FromArgb(250, 250, 250),
-                ForeColor = Color.FromArgb(9, 9, 11),
+                IsPrimary = true,
+                CornerRadius = 9f,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                AccessibleName = text
             };
-            b.FlatAppearance.BorderSize = 0;
-            return b;
         }
 
         protected override void OnHandleCreated(EventArgs e) {
@@ -858,7 +1166,7 @@ namespace UDrop {
             g.Clear(Color.Black);
 
             Rectangle glassBounds = new Rectangle(3, 3, qrCanvasPanel.Width - 7, qrCanvasPanel.Height - 7);
-            DrawLiquidGlassCard(g, glassBounds, 24f, true);
+            GlassDraw.DrawLiquidGlassCard(g, glassBounds, 24f, true);
 
             if (particles.Count == 0 || qrSize <= 0) {
                 using (Font f = new Font("Segoe UI", 9f, FontStyle.Regular))
@@ -866,7 +1174,7 @@ namespace UDrop {
                     StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString("Collecting modules...", f, b, qrCanvasPanel.ClientRectangle, sf);
                 }
-                DrawLiquidGlassRim(g, glassBounds, 24f, true);
+                GlassDraw.DrawLiquidGlassRim(g, glassBounds, 24f, true);
                 return;
             }
 
@@ -919,18 +1227,19 @@ namespace UDrop {
                 }
             }
 
-            DrawLiquidGlassRim(g, glassBounds, 24f, true);
+            GlassDraw.DrawLiquidGlassRim(g, glassBounds, 24f, true);
         }
 
         private void OnFeedCanvasPaint(object sender, PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             g.Clear(Color.Black);
             feedHits.Clear();
 
             Rectangle feedRect = new Rectangle(1, 1, feedCanvasPanel.Width - 3, feedCanvasPanel.Height - 3);
-            DrawLiquidGlassCard(g, feedRect, 14f, false);
-            DrawLiquidGlassRim(g, feedRect, 14f, false);
+            GlassDraw.DrawLiquidGlassCard(g, feedRect, 14f, false);
+            GlassDraw.DrawLiquidGlassRim(g, feedRect, 14f, false);
 
             int y = 10;
             int w = feedCanvasPanel.Width - 20;
@@ -954,14 +1263,17 @@ namespace UDrop {
                         : string.Format("{0}%", item.Percent);
                     DrawRightText(g, speedTxt, 8.25f, FontStyle.Bold, Color.FromArgb(74, 222, 128), new Rectangle(20, y + 6, w - 20, 18));
 
-                    // Progress track
+                    // Rounded Progress Capsule
                     Rectangle track = new Rectangle(20, y + 29, w - 20, 6);
+                    using (GraphicsPath trackPath = GlassDraw.CreateRoundedRectPath(track, 3f))
                     using (SolidBrush tb = new SolidBrush(Color.FromArgb(40, 40, 50))) {
-                        g.FillRectangle(tb, track);
+                        g.FillPath(tb, trackPath);
                     }
-                    int fillW = Math.Max(4, (int)(track.Width * (Math.Min(100, Math.Max(0, item.Percent)) / 100.0)));
+                    int fillW = Math.Max(6, (int)(track.Width * (Math.Min(100, Math.Max(0, item.Percent)) / 100.0)));
+                    Rectangle fillRect = new Rectangle(track.X, track.Y, Math.Min(track.Width, fillW), track.Height);
+                    using (GraphicsPath fillPath = GlassDraw.CreateRoundedRectPath(fillRect, 3f))
                     using (SolidBrush fb = new SolidBrush(Color.FromArgb(250, 250, 250))) {
-                        g.FillRectangle(fb, track.X, track.Y, fillW, track.Height);
+                        g.FillPath(fb, fillPath);
                     }
 
                     string meta = string.Format("From [ {0} ]  •  {1} / {2} ({3}%)",
@@ -978,15 +1290,21 @@ namespace UDrop {
                 for (int i = 0; i < outboundItems.Count && y < feedCanvasPanel.Height - 32; i++) {
                     OutboundFileItem ob = outboundItems[i];
                     Rectangle rowRect = new Rectangle(10, y, w, 34);
-                    DrawCardBox(g, rowRect, Color.FromArgb(22, 22, 28), Color.FromArgb(42, 42, 52));
+                    DrawCardBox(g, rowRect, Color.FromArgb(22, 22, 28), Color.FromArgb(44, 44, 56));
 
                     string obLabel = string.Format("[{0}] {1}", GetFileCategoryTag(ob.Name), ob.Name);
                     DrawClippedText(g, obLabel, 8.5f, FontStyle.Bold, Color.FromArgb(244, 244, 245), new Rectangle(18, y + 8, w - 96, 18));
                     DrawRightText(g, FormatBytes(ob.Size), 7.75f, FontStyle.Regular, Color.FromArgb(161, 161, 170), new Rectangle(18, y + 9, w - 52, 16));
 
-                    Rectangle unshareBtn = new Rectangle(10 + w - 28, y + 6, 22, 22);
-                    DrawActionPill(g, unshareBtn, "X", Color.FromArgb(36, 36, 46), Color.FromArgb(212, 212, 216));
+                    Rectangle unshareBtn = new Rectangle(10 + w - 30, y + 6, 22, 22);
+                    int idx = feedHits.Count;
                     feedHits.Add(new FeedHitRegion { Bounds = unshareBtn, Kind = "unshare", Payload = ob.Id });
+                    bool isHov = hoveredHitIndex == idx;
+                    bool isFoc = feedCanvasPanel.Focused && focusedHitIndex == idx;
+                    DrawActionPill(g, unshareBtn, "X",
+                        isHov ? Color.FromArgb(62, 42, 46) : Color.FromArgb(36, 36, 46),
+                        isHov ? Color.FromArgb(250, 250, 250) : Color.FromArgb(212, 212, 216),
+                        isFoc);
 
                     y += 39;
                 }
@@ -998,23 +1316,31 @@ namespace UDrop {
                 for (int i = 0; i < completedItems.Count && y < feedCanvasPanel.Height - 32; i++) {
                     CompletedTransferItem ct = completedItems[i];
                     Rectangle rowRect = new Rectangle(10, y, w, 36);
-                    DrawCardBox(g, rowRect, Color.FromArgb(22, 22, 28), Color.FromArgb(42, 42, 52));
+                    DrawCardBox(g, rowRect, Color.FromArgb(22, 22, 28), Color.FromArgb(44, 44, 56));
 
                     bool cancelled = ct.Status == "cancelled";
                     Color pillCol = cancelled ? Color.FromArgb(248, 113, 113) : Color.FromArgb(74, 222, 128);
                     string catTag = GetFileCategoryTag(ct.FileName);
                     string line = string.Format("[{0}] {1} ({2})", catTag, ct.FileName, FormatBytes(ct.FileSize));
-                    DrawClippedText(g, line, 8.25f, FontStyle.Bold, cancelled ? Color.FromArgb(161, 161, 170) : Color.FromArgb(244, 244, 245), new Rectangle(18, y + 9, w - 118, 18));
+                    DrawClippedText(g, line, 8.25f, FontStyle.Bold, cancelled ? Color.FromArgb(161, 161, 170) : Color.FromArgb(244, 244, 245), new Rectangle(18, y + 9, w - 122, 18));
 
                     if (!cancelled && !string.IsNullOrEmpty(ct.FilePath)) {
                         string verb = GetContextActionVerb(catTag);
-                        Rectangle openBtn = new Rectangle(10 + w - 98, y + 7, 52, 22);
-                        DrawActionPill(g, openBtn, verb, Color.FromArgb(250, 250, 250), Color.FromArgb(9, 9, 11));
+                        Rectangle openBtn = new Rectangle(10 + w - 102, y + 7, 54, 22);
+                        int launchIdx = feedHits.Count;
                         feedHits.Add(new FeedHitRegion { Bounds = openBtn, Kind = "launch", Payload = ct.FilePath });
+                        DrawActionPill(g, openBtn, verb,
+                            hoveredHitIndex == launchIdx ? Color.FromArgb(228, 228, 231) : Color.FromArgb(250, 250, 250),
+                            Color.FromArgb(9, 9, 11),
+                            feedCanvasPanel.Focused && focusedHitIndex == launchIdx);
 
-                        Rectangle dirBtn = new Rectangle(10 + w - 40, y + 7, 34, 22);
-                        DrawActionPill(g, dirBtn, "Dir", Color.FromArgb(36, 36, 46), Color.FromArgb(212, 212, 216));
+                        Rectangle dirBtn = new Rectangle(10 + w - 42, y + 7, 34, 22);
+                        int dirIdx = feedHits.Count;
                         feedHits.Add(new FeedHitRegion { Bounds = dirBtn, Kind = "open", Payload = ct.FilePath });
+                        DrawActionPill(g, dirBtn, "Dir",
+                            hoveredHitIndex == dirIdx ? Color.FromArgb(52, 52, 66) : Color.FromArgb(36, 36, 46),
+                            Color.FromArgb(244, 244, 245),
+                            feedCanvasPanel.Focused && focusedHitIndex == dirIdx);
                     } else {
                         DrawRightText(g, cancelled ? "Cancelled" : "Done", 7.75f, FontStyle.Bold, pillCol, new Rectangle(18, y + 10, w - 18, 16));
                     }
@@ -1025,7 +1351,7 @@ namespace UDrop {
 
             if (activeItems.Count == 0 && outboundItems.Count == 0 && completedItems.Count == 0) {
                 using (Font f = new Font("Segoe UI", 9f, FontStyle.Regular))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(140, 140, 152))) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(161, 161, 170))) {
                     StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString(
                         "Paired & Ready.\r\n\r\nSend photos or 4K videos from your phone,\r\nor drop files here to beam back to phones.",
@@ -1037,25 +1363,32 @@ namespace UDrop {
 
         private static int DrawSectionHeader(Graphics g, string text, int x, int y) {
             using (Font f = new Font("Segoe UI", 7.25f, FontStyle.Bold))
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(113, 113, 122))) {
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(161, 161, 170))) {
                 g.DrawString(text, f, b, x, y);
             }
             return y + 16;
         }
 
         private static void DrawCardBox(Graphics g, Rectangle rect, Color fill, Color border) {
+            using (GraphicsPath path = GlassDraw.CreateRoundedRectPath(rect, 10f))
             using (SolidBrush fb = new SolidBrush(fill))
             using (Pen bp = new Pen(border, 1f)) {
-                g.FillRectangle(fb, rect);
-                g.DrawRectangle(bp, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+                g.FillPath(fb, path);
+                g.DrawPath(bp, path);
             }
         }
 
-        private static void DrawActionPill(Graphics g, Rectangle rect, string text, Color fill, Color fg) {
+        private static void DrawActionPill(Graphics g, Rectangle rect, string text, Color fill, Color fg, bool focused) {
+            using (GraphicsPath path = GlassDraw.CreateRoundedRectPath(rect, 7f))
             using (SolidBrush fb = new SolidBrush(fill))
             using (Font f = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (SolidBrush tb = new SolidBrush(fg)) {
-                g.FillRectangle(fb, rect);
+                g.FillPath(fb, path);
+                if (focused) {
+                    using (Pen fp = new Pen(Color.FromArgb(250, 250, 250), 1.4f)) {
+                        g.DrawPath(fp, path);
+                    }
+                }
                 StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                 g.DrawString(text, f, tb, rect, sf);
             }
@@ -1078,29 +1411,53 @@ namespace UDrop {
         }
 
         private void OnFeedCanvasMouseMove(object sender, MouseEventArgs e) {
-            bool overButton = false;
+            int nextHover = -1;
             for (int i = 0; i < feedHits.Count; i++) {
                 if (feedHits[i].Bounds.Contains(e.Location)) {
-                    overButton = true;
+                    nextHover = i;
                     break;
                 }
             }
-            feedCanvasPanel.Cursor = overButton ? Cursors.Hand : Cursors.Default;
+            if (nextHover != hoveredHitIndex) {
+                hoveredHitIndex = nextHover;
+                feedCanvasPanel.Invalidate();
+            }
+            feedCanvasPanel.Cursor = nextHover >= 0 ? Cursors.Hand : Cursors.Default;
         }
 
         private void OnFeedCanvasClick(object sender, MouseEventArgs e) {
             for (int i = 0; i < feedHits.Count; i++) {
-                FeedHitRegion hit = feedHits[i];
-                if (!hit.Bounds.Contains(e.Location)) continue;
-
-                if (hit.Kind == "launch") {
-                    OpenFileWithDefaultApp(hit.Payload);
-                } else if (hit.Kind == "open") {
-                    RevealFileInExplorer(hit.Payload);
-                } else if (hit.Kind == "unshare") {
-                    UnshareOutboundFile(hit.Payload);
-                }
+                if (!feedHits[i].Bounds.Contains(e.Location)) continue;
+                focusedHitIndex = i;
+                TriggerFeedHit(feedHits[i]);
                 break;
+            }
+        }
+
+        private void OnFeedCanvasKeyDown(object sender, KeyEventArgs e) {
+            if (feedHits.Count == 0) return;
+            if (e.KeyCode == Keys.Down || e.KeyCode == Keys.Right) {
+                focusedHitIndex = (focusedHitIndex + 1) % feedHits.Count;
+                feedCanvasPanel.Invalidate();
+                e.Handled = true;
+            } else if (e.KeyCode == Keys.Up || e.KeyCode == Keys.Left) {
+                focusedHitIndex = (focusedHitIndex <= 0 ? feedHits.Count - 1 : focusedHitIndex - 1);
+                feedCanvasPanel.Invalidate();
+                e.Handled = true;
+            } else if ((e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space) && focusedHitIndex >= 0 && focusedHitIndex < feedHits.Count) {
+                TriggerFeedHit(feedHits[focusedHitIndex]);
+                e.Handled = true;
+            }
+        }
+
+        private void TriggerFeedHit(FeedHitRegion hit) {
+            if (hit == null) return;
+            if (hit.Kind == "launch") {
+                OpenFileWithDefaultApp(hit.Payload);
+            } else if (hit.Kind == "open") {
+                RevealFileInExplorer(hit.Payload);
+            } else if (hit.Kind == "unshare") {
+                UnshareOutboundFile(hit.Payload);
             }
         }
 
@@ -1234,100 +1591,11 @@ namespace UDrop {
             }
         }
 
-        private static GraphicsPath CreateRoundedRectPath(Rectangle bounds, float radius) {
-            GraphicsPath path = new GraphicsPath();
-            float d = radius * 2f;
-            if (d > bounds.Width) d = bounds.Width;
-            if (d > bounds.Height) d = bounds.Height;
-            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        private static void DrawSpecularGlint(Graphics g, float cx, float cy, float rx, float ry, int peakAlpha) {
-            RectangleF rect = new RectangleF(cx - rx, cy - ry, rx * 2f, ry * 2f);
-            using (GraphicsPath gp = new GraphicsPath()) {
-                gp.AddEllipse(rect);
-                using (PathGradientBrush pgb = new PathGradientBrush(gp)) {
-                    pgb.CenterColor = Color.FromArgb(peakAlpha, 255, 255, 255);
-                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
-                    g.FillPath(pgb, gp);
-                }
-            }
-        }
-
-        private static void DrawLiquidGlassCard(Graphics g, Rectangle bounds, float radius, bool withDiagonalSheen) {
-            using (GraphicsPath cardPath = CreateRoundedRectPath(bounds, radius)) {
-                using (LinearGradientBrush bodyBrush = new LinearGradientBrush(
-                    new Point(bounds.Left, bounds.Top),
-                    new Point(bounds.Right, bounds.Bottom),
-                    Color.FromArgb(245, 24, 25, 32),
-                    Color.FromArgb(250, 10, 11, 15))) {
-                    g.FillPath(bodyBrush, cardPath);
-                }
-
-                if (withDiagonalSheen) {
-                    GraphicsState saved = g.Save();
-                    g.SetClip(cardPath);
-                    PointF[] sheenPoly = new PointF[] {
-                        new PointF(bounds.Left, bounds.Top),
-                        new PointF(bounds.Left + bounds.Width * 0.42f, bounds.Top),
-                        new PointF(bounds.Left + bounds.Width * 0.72f, bounds.Bottom),
-                        new PointF(bounds.Left + bounds.Width * 0.14f, bounds.Bottom)
-                    };
-                    using (LinearGradientBrush sheen = new LinearGradientBrush(
-                        new PointF(bounds.Left, bounds.Top),
-                        new PointF(bounds.Left + bounds.Width * 0.65f, bounds.Bottom * 0.85f),
-                        Color.FromArgb(36, 255, 255, 255),
-                        Color.FromArgb(0, 255, 255, 255))) {
-                        g.FillPolygon(sheen, sheenPoly);
-                    }
-                    g.Restore(saved);
-                }
-            }
-        }
-
-        private static void DrawLiquidGlassRim(Graphics g, Rectangle bounds, float radius, bool drawCornerFlares) {
-            using (GraphicsPath outerPath = CreateRoundedRectPath(bounds, radius)) {
-                using (LinearGradientBrush rimGrad = new LinearGradientBrush(
-                    new Point(bounds.Left, bounds.Top),
-                    new Point(bounds.Right, bounds.Bottom),
-                    Color.FromArgb(190, 255, 255, 255),
-                    Color.FromArgb(150, 210, 218, 232))) {
-                    ColorBlend cb = new ColorBlend(3);
-                    cb.Colors = new Color[] {
-                        Color.FromArgb(195, 255, 255, 255),
-                        Color.FromArgb(52, 160, 168, 185),
-                        Color.FromArgb(185, 240, 244, 255)
-                    };
-                    cb.Positions = new float[] { 0.0f, 0.48f, 1.0f };
-                    rimGrad.InterpolationColors = cb;
-                    using (Pen rimPen = new Pen(rimGrad, 1.6f)) {
-                        g.DrawPath(rimPen, outerPath);
-                    }
-                }
-            }
-
-            Rectangle inner = new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2);
-            using (GraphicsPath innerPath = CreateRoundedRectPath(inner, Math.Max(4f, radius - 1f)))
-            using (Pen innerPen = new Pen(Color.FromArgb(40, 255, 255, 255), 1f)) {
-                g.DrawPath(innerPen, innerPath);
-            }
-
-            if (drawCornerFlares) {
-                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.74f, bounds.Top + 1f, 36f, 9f, 165);
-                DrawSpecularGlint(g, bounds.Left + bounds.Width * 0.24f, bounds.Bottom - 1f, 38f, 9f, 155);
-            }
-        }
-
         private void OnFormPaint(object sender, PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             Rectangle outerRect = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
-            DrawLiquidGlassRim(g, outerRect, 14f, true);
+            GlassDraw.DrawLiquidGlassRim(g, outerRect, 14f, true);
         }
 
         private void OnHeaderMouseDown(object sender, MouseEventArgs e) {

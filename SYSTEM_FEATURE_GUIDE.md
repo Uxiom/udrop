@@ -53,11 +53,10 @@ Whenever uDrop is flipped **ON** (from the tray switch, `Ctrl + Shift + U`, Desk
 
 ### Overlay Lifecycle & Controls
 - **Kinetic QR Assemble & Post-Scan Dismantle**: On turn-ON, particles swirl and assemble into a crisp high-contrast QR matrix. As soon as a mobile camera scans and loads uDrop, the QR modules dismantle outward and morph automatically into the **Live Transfer Overlay Dashboard**.
-- **Live Transfer Dashboard**: Once paired, the overlay shows active peer slots (`U X I O M`), live upload/download progress bars, recently completed files with direct **`Open`** actions, drag-and-drop / **`+ Share File`** host sharing, per-file **`[X]`** unshare controls, and a **`Pair Device (QR)`** toggle to re-assemble the QR when adding another device.
+- **Live Hub Dashboard**: Once paired, the overlay shows active peer slots (`U X I O M`), live upload/download progress bars, recently completed files with context-aware **`View`** / **`Play`** / **`Import`** / **`Open`** + **`Dir`** actions, drag-and-drop / **`+ Share File`** host sharing, per-file **`[X]`** unshare controls, and **`Show QR`** / **`Live Hub`** header switching.
 - **`Use IP` / `Use .local` Switch**: Toggles the QR code and displayed address between mDNS hostname (`http://<host>.local:4040`) and direct LAN IPv4 (`http://<ip>:4040`)—useful on routers or Android setups that do not resolve `.local` hostnames.
-- **`Pin` Button**: Keeps the Glass Overlay topmost until unpinned or minimized.
-- **`X` / `Esc`**: Minimizes the overlay back into the system tray while keeping uDrop **ON**.
-- **`Copy URL` / `Downloads` / `Turn OFF`**: Copy link, jump to received files, or turn uDrop completely **OFF**.
+- **Minimize (`–` / `Esc`)**: Minimizes the floating overlay cleanly back into the taskbar tray while keeping uDrop **ON**.
+- **`Copy URL` / `Downloads` / `Web UI` / `Turn OFF`**: Copy pairing link, open `Downloads\uDrop`, launch browser UI, or close port `4040`.
 - **Draggable Header**: Drag anywhere along the top bar to reposition the overlay.
 
 ---
@@ -69,7 +68,7 @@ When **"Add 'Share via uDrop' to Windows Explorer right-click menu"** is checked
 1. Right-click any video, photo, ZIP archive, or document in Windows File Explorer.
 2. Click **Share via uDrop**.
 3. Windows invokes `"udrop.exe" --share "<file-path>"`.
-4. uDrop automatically switches **ON** (if currently off), registers that file via loopback HTTP (`POST /api/outbound/register`), refreshes connected phones over Server-Sent Events, and opens the **Liquid Glass QR Overlay** showing `Sharing: <filename>` so any phone can scan and download immediately.
+4. uDrop automatically switches **ON** (if currently off), registers that file via loopback HTTP (`POST /api/outbound/register`), refreshes connected phones over Server-Sent Events, and opens the **Liquid Glass QR Overlay** showing `Ready to beam: <filename>` so any phone can scan and download immediately.
 
 ---
 

@@ -26,6 +26,19 @@
   box-sizing: border-box;
 }
 
+:focus-visible {
+  outline: 2px solid var(--zinc-50);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 84px;
@@ -321,7 +334,7 @@ kbd {
 
 .hero-meta {
   font-size: 12.5px;
-  color: var(--zinc-500);
+  color: var(--zinc-400);
 }
 
 .hero-meta a {
@@ -410,9 +423,26 @@ kbd {
   width: 72px;
   height: 72px;
   flex-shrink: 0;
-  background: var(--zinc-50);
-  border-radius: 8px;
+  background: linear-gradient(145deg, #1E2028 0%, #0B0C10 100%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
   padding: 6px;
+}
+
+.showcase-section {
+  margin-bottom: 36px;
+}
+
+.showcase-card {
+  padding: 12px;
+  background: linear-gradient(180deg, #121216 0%, #09090B 100%);
+}
+
+.showcase-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
 }
 
 .preview-status-title {
@@ -434,7 +464,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: var(--zinc-500);
+  color: var(--zinc-400);
   padding-top: 12px;
   border-top: 1px solid var(--zinc-800);
 }
@@ -625,7 +655,7 @@ td code {
   justify-content: space-between;
   gap: 12px;
   font-size: 13px;
-  color: var(--zinc-500);
+  color: var(--zinc-400);
 }
 
 .site-footer a {
