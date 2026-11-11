@@ -13,6 +13,7 @@
     "./daemon": "./src/daemon.js",
     "./hotspot": "./src/hotspot.js",
     "./desktop": "./src/desktop.js",
+    "./context": "./src/file-context.js",
     "./package.json": "./package.json"
   },
   "bin": {

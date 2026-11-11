@@ -56,27 +56,35 @@ npm install -g @uxiom/udrop
 3. **Multi-File Batch Queue**: When selecting multiple videos/files at once, uDrop switches to balanced 4 MB/8 MB dual pipelines with per-file progress pills, retry resilience, and automatic mobile HTTP stay-awake.
 4. Files are saved directly to your PC's `Downloads\uDrop` folder.
 
-### Sending Files from Windows to Phone
+### Sending Files from Windows to Phone (Context-Aware Handoff)
 1. Right-click any file in File Explorer -> **Share via uDrop**, or drag and drop files onto either the **Live Transfer Overlay** or the local web dashboard (`http://localhost:4040`). To remove a shared file, click **`[X]`** next to it on either surface.
-2. On your phone, look at the **Files from Host** card.
-3. Tap **Download** to save it to your phone.
-
-### In-Flight Transfer Cancellation & Queue Cleanup
-If you started an accidental transfer or wish to stop a file midway:
-1. Tap the **Cancel** button on the active transfer card.
-2. The active XHR stream is immediately aborted, partial data on disk and server session state are deleted, and the mobile queue/inputs are completely cleared so subsequent transfers start clean.
+2. On your phone, **Files from Host** identifies each item (`PHOTO`, `VIDEO`, `CONTACT`, `PDF`, `AUDIO`, `ARCHIVE`):
+   - **Photos / Videos**: Tap **Save Photo** / **Save Video** to open your phone's native Share Sheet (*Save Image* / *Save Video* into **Photos**), or tap **Download** for **Files -> Downloads**.
+   - **Contact Cards (`.vcf`)**: Tap **Add Contact** to trigger iOS/Android's native Contacts import screen directly.
+   - **PDF / Audio**: Tap **Preview** / **Play** or **Download**.
+3. On Windows, completed uploads land in `Downloads\uDrop` with context verbs (**View** for photos/PDFs, **Play** for video/audio, **Import** for `.vcf` contacts, and **Dir** to highlight in File Explorer).
 
 ---
 
-## 3. Network Troubleshooting
+## 3. OS Quirks, Permissions & Firewalls
 
-### Issue: Phone cannot reach the PC URL
-1. Ensure both devices are connected to the same Wi-Fi network (set to **Private** profile in Windows Network settings if possible).
-2. If Windows Defender Firewall prompts on first mobile connection, click **Allow access** for Node.js/uDrop.
-3. On Android devices that do not resolve `.local` addresses, click **`Use IP`** on the Liquid Glass QR Overlay to encode your direct LAN IPv4 address (`http://192.168.x.x:4040`).
-4. If using a guest or public Wi-Fi network with client isolation enabled, start uDrop in direct hotspot mode:
-   `udrop --hotspot`
-5. Point your phone camera at the Wi-Fi QR code to join the direct hotspot, then transfer files offline.
+### Windows 10 / 11
+1. **SmartScreen Prompt**: Downloaded binaries are unsigned (`asInvoker`). If Windows warns on first run, click **More info -> Run anyway**.
+2. **Firewall & Network Profile**: Ensure Wi-Fi is set to **Private** (`Settings -> Network & internet -> Properties`) and click **Allow access** when Windows Defender Firewall prompts for Node.js / TCP `4040`.
+
+### Android & iPhone
+1. **`.local` mDNS Resolution**: If an Android phone cannot reach `<pc-name>.local:4040`, click **`Use IP`** on the Liquid Glass QR Overlay to encode direct LAN IPv4 (`http://192.168.x.x:4040`).
+2. **iOS Safari**: Accept the **Local Network** permission prompt; disable iCloud Private Relay if local addresses time out.
+3. **Android Chrome**: Avoid switching apps/locking screen during huge batches; disable strict battery optimization for Chrome if uploads pause.
+
+### macOS & Linux
+- **macOS**: Allow Local Network access under **System Settings -> Privacy & Security -> Local Network** for your Terminal/Node runtime.
+- **Linux**: Ensure `avahi-daemon` is active for `.local` hostnames and permit port `4040/tcp` (`sudo ufw allow 4040/tcp`).
+
+### Guest / Public Wi-Fi (Client Isolation)
+If hotel or campus Wi-Fi blocks device-to-device packets, use direct hotspot mode:
+`udrop --hotspot`
+Point your phone camera at the terminal Wi-Fi QR code to join directly over `192.168.137.1` without an external router.
 
 ---
 

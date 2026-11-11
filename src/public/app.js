@@ -39,8 +39,12 @@ const targetNodeText = document.getElementById('targetNodeText');
 const dropzoneActionText = document.getElementById('dropzoneActionText');
 const incomingTransferCard = document.getElementById('incomingTransferCard');
 const incomingFromText = document.getElementById('incomingFromText');
+const incomingThumbBox = document.getElementById('incomingThumbBox');
+const incomingTypeBadge = document.getElementById('incomingTypeBadge');
 const incomingFileName = document.getElementById('incomingFileName');
 const incomingFileSize = document.getElementById('incomingFileSize');
+const incomingDestHint = document.getElementById('incomingDestHint');
+const incomingContextBtn = document.getElementById('incomingContextBtn');
 const incomingDownloadBtn = document.getElementById('incomingDownloadBtn');
 const dismissIncomingBtn = document.getElementById('dismissIncomingBtn');
 
@@ -99,6 +103,149 @@ function isLocalHostPage() {
   return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]';
 }
 
+const CONTEXT_UI_META = {
+  photo: {
+    badge: 'PHOTO',
+    iconLabel: 'IMG',
+    hint: 'Save to Photos or Downloads',
+    actionLabel: 'Save Photo',
+    actionKind: 'share-or-inline',
+    mimeFallback: 'image/jpeg'
+  },
+  video: {
+    badge: 'VIDEO',
+    iconLabel: 'VID',
+    hint: 'Save to Photos / Video or Files',
+    actionLabel: 'Save Video',
+    actionKind: 'share-or-inline',
+    mimeFallback: 'video/mp4'
+  },
+  contact: {
+    badge: 'CONTACT',
+    iconLabel: 'VCF',
+    hint: 'Opens directly in Contacts',
+    actionLabel: 'Add Contact',
+    actionKind: 'inline-link',
+    mimeFallback: 'text/vcard'
+  },
+  pdf: {
+    badge: 'PDF',
+    iconLabel: 'PDF',
+    hint: 'Preview or save to Files',
+    actionLabel: 'Preview',
+    actionKind: 'inline-tab',
+    mimeFallback: 'application/pdf'
+  },
+  audio: {
+    badge: 'AUDIO',
+    iconLabel: 'AUD',
+    hint: 'Play inline or save to Files',
+    actionLabel: 'Play',
+    actionKind: 'inline-tab',
+    mimeFallback: 'audio/mpeg'
+  },
+  archive: {
+    badge: 'ARCHIVE',
+    iconLabel: 'ZIP',
+    hint: 'Saves to Files / Downloads',
+    actionLabel: '',
+    actionKind: 'none',
+    mimeFallback: 'application/zip'
+  },
+  doc: {
+    badge: 'DOC',
+    iconLabel: 'DOC',
+    hint: 'Saves to Files / Downloads',
+    actionLabel: '',
+    actionKind: 'none',
+    mimeFallback: 'application/octet-stream'
+  },
+  file: {
+    badge: 'FILE',
+    iconLabel: 'FILE',
+    hint: 'Saves to Downloads',
+    actionLabel: '',
+    actionKind: 'none',
+    mimeFallback: 'application/octet-stream'
+  }
+};
+
+function inferCategoryFromName(fileName) {
+  const lower = String(fileName || '').toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  const ext = dot >= 0 ? lower.slice(dot) : '';
+  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.avif', '.bmp'].includes(ext)) return 'photo';
+  if (['.mp4', '.m4v', '.mov', '.webm', '.mkv'].includes(ext)) return 'video';
+  if (['.vcf', '.vcard'].includes(ext)) return 'contact';
+  if (ext === '.pdf') return 'pdf';
+  if (['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].includes(ext)) return 'audio';
+  if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) return 'archive';
+  if (['.txt', '.csv', '.md', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'].includes(ext)) return 'doc';
+  return 'file';
+}
+
+function getClientFileContext(fileName, serverMeta) {
+  const cat = (serverMeta && serverMeta.category && CONTEXT_UI_META[serverMeta.category])
+    ? serverMeta.category
+    : inferCategoryFromName(fileName);
+  const base = CONTEXT_UI_META[cat] || CONTEXT_UI_META.file;
+  const mime = (serverMeta && serverMeta.mime) ? serverMeta.mime : base.mimeFallback;
+  const inlineSafe = serverMeta && typeof serverMeta.inlineSafe === 'boolean'
+    ? serverMeta.inlineSafe
+    : (cat === 'photo' || cat === 'contact' || cat === 'pdf' || cat === 'audio' || (cat === 'video' && !String(fileName || '').toLowerCase().endsWith('.mkv')));
+  return { category: cat, mime, inlineSafe, ...base };
+}
+
+async function triggerContextSaveAction(downloadUrl, fileName, fileSize, ctx, btnEl) {
+  const inlineUrl = downloadUrl + (downloadUrl.includes('?') ? '&' : '?') + 'inline=1';
+
+  // Use OS Share Sheet when available (opens iOS "Save Image/Video" into Photos)
+  if (
+    ctx.actionKind === 'share-or-inline' &&
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function' &&
+    (!fileSize || fileSize <= 120 * 1024 * 1024)
+  ) {
+    const prevLabel = btnEl ? btnEl.textContent : '';
+    try {
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = 'Preparing...';
+      }
+      const res = await fetch(downloadUrl);
+      const blob = await res.blob();
+      const shareFile = new File([blob], fileName, { type: blob.type || ctx.mime });
+      if (navigator.canShare({ files: [shareFile] })) {
+        await navigator.share({ files: [shareFile], title: fileName });
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = prevLabel;
+      }
+    }
+  }
+
+  if (ctx.inlineSafe) {
+    if (ctx.category === 'contact') {
+      window.location.href = inlineUrl;
+    } else {
+      window.open(inlineUrl, '_blank', 'noopener');
+    }
+    return;
+  }
+
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.setAttribute('download', fileName);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // 1. Fetch Host Device Info
 async function checkHostConnection() {
   try {
@@ -128,19 +275,53 @@ async function loadHostFiles() {
     hostFilesList.innerHTML = files.map(f => {
       const safeName = escapeHtml(f.name);
       const safeId = encodeURIComponent(f.id);
+      const downloadUrl = `/api/download/${safeId}`;
+      const ctx = getClientFileContext(f.name, f);
+      const thumbHtml = ctx.category === 'photo'
+        ? `<div class="file-thumb-box"><img src="${downloadUrl}?inline=1" class="file-thumb" loading="lazy" alt=""></div>`
+        : `<div class="file-thumb-box file-thumb-badge">${escapeHtml(ctx.iconLabel)}</div>`;
+      const actionHtml = ctx.actionLabel
+        ? (ctx.actionKind === 'inline-link' && ctx.inlineSafe
+            ? `<a href="${downloadUrl}?inline=1" class="btn-context-action">${escapeHtml(ctx.actionLabel)}</a>`
+            : (ctx.actionKind === 'inline-tab' && ctx.inlineSafe
+                ? `<a href="${downloadUrl}?inline=1" target="_blank" rel="noopener" class="btn-context-action">${escapeHtml(ctx.actionLabel)}</a>`
+                : `<button type="button" class="btn-context-action js-context-save" data-url="${downloadUrl}" data-name="${safeName}" data-size="${Number(f.size) || 0}" data-cat="${escapeHtml(ctx.category)}" data-mime="${escapeHtml(ctx.mime)}">${escapeHtml(ctx.actionLabel)}</button>`))
+        : '';
+
       return `
       <div class="file-row">
+        ${thumbHtml}
         <div class="file-row-info">
-          <span class="file-row-name" title="${safeName}">${safeName}</span>
-          <span class="file-row-size">${formatBytes(f.size)}</span>
+          <div class="file-title-line">
+            <span class="file-kind-pill">${escapeHtml(ctx.badge)}</span>
+            <span class="file-row-name" title="${safeName}">${safeName}</span>
+          </div>
+          <div class="file-meta-line">
+            <span class="file-row-size">${formatBytes(f.size)}</span>
+            <span class="meta-dot">•</span>
+            <span class="file-dest-hint">${escapeHtml(ctx.hint)}</span>
+          </div>
         </div>
         <div class="file-row-actions">
-          <a href="/api/download/${safeId}" class="btn-download" download>Download</a>
+          ${actionHtml}
+          <a href="${downloadUrl}" class="btn-download" download>Download</a>
           ${canUnshare ? `<button type="button" class="btn-unshare" data-unshare-id="${safeId}" title="Remove from shared list">&times;</button>` : ''}
         </div>
       </div>
     `;
     }).join('');
+
+    hostFilesList.querySelectorAll('.js-context-save').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.getAttribute('data-url');
+        const name = btn.getAttribute('data-name') || 'file';
+        const size = Number(btn.getAttribute('data-size') || '0');
+        const cat = btn.getAttribute('data-cat');
+        const mime = btn.getAttribute('data-mime');
+        const ctx = getClientFileContext(name, { category: cat, mime, inlineSafe: true });
+        triggerContextSaveAction(url, name, size, ctx, btn);
+      });
+    });
 
     if (canUnshare) {
       hostFilesList.querySelectorAll('.btn-unshare').forEach(btn => {
@@ -581,6 +762,8 @@ if (window.location.search.includes('qr=') || window.location.hash === '#qr') {
   openQrModal();
 }
 
+let activeIncomingTransfer = null;
+
 function handleIncomingMeshTransfer(transfer) {
   // If sent by this device, ignore
   if (transfer.fromSlot === mySlot) return;
@@ -589,15 +772,53 @@ function handleIncomingMeshTransfer(transfer) {
   if (transfer.toSlot !== 'ALL' && transfer.toSlot !== mySlot) return;
 
   if (incomingTransferCard) {
+    const ctx = getClientFileContext(transfer.fileName, transfer);
+    activeIncomingTransfer = { ...transfer, ctx };
+
     incomingFromText.textContent = `From Node [ ${transfer.fromSlot} ] -> [ ${transfer.toSlot} ]`;
     incomingFileName.textContent = transfer.fileName;
     incomingFileSize.textContent = formatBytes(transfer.fileSize);
+    if (incomingTypeBadge) incomingTypeBadge.textContent = ctx.badge;
+    if (incomingDestHint) incomingDestHint.textContent = ctx.hint;
+
+    if (incomingThumbBox) {
+      incomingThumbBox.classList.remove('hidden', 'file-thumb-badge');
+      if (ctx.category === 'photo') {
+        incomingThumbBox.innerHTML = `<img src="${transfer.downloadUrl}?inline=1" class="file-thumb" alt="">`;
+      } else {
+        incomingThumbBox.classList.add('file-thumb-badge');
+        incomingThumbBox.textContent = ctx.iconLabel;
+      }
+    }
+
+    if (incomingContextBtn) {
+      if (ctx.actionLabel) {
+        incomingContextBtn.textContent = ctx.actionLabel;
+        incomingContextBtn.classList.remove('hidden');
+      } else {
+        incomingContextBtn.classList.add('hidden');
+      }
+    }
+
     incomingDownloadBtn.href = transfer.downloadUrl;
     incomingDownloadBtn.setAttribute('download', transfer.fileName);
     incomingTransferCard.classList.remove('hidden');
 
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
   }
+}
+
+if (incomingContextBtn) {
+  incomingContextBtn.addEventListener('click', () => {
+    if (!activeIncomingTransfer) return;
+    triggerContextSaveAction(
+      activeIncomingTransfer.downloadUrl,
+      activeIncomingTransfer.fileName,
+      activeIncomingTransfer.fileSize,
+      activeIncomingTransfer.ctx,
+      incomingContextBtn
+    );
+  });
 }
 
 if (dismissIncomingBtn) {

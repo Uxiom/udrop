@@ -193,11 +193,22 @@
           </button>
         </div>
         <div class="incoming-body">
+          <div id="incomingThumbBox" class="file-thumb-box hidden"></div>
           <div class="incoming-info">
-            <h3 id="incomingFileName">VID_4K.mp4</h3>
-            <span id="incomingFileSize">0 MB</span>
+            <div class="file-title-line">
+              <span id="incomingTypeBadge" class="file-kind-pill">FILE</span>
+              <h3 id="incomingFileName">VID_4K.mp4</h3>
+            </div>
+            <div class="file-meta-line">
+              <span id="incomingFileSize">0 MB</span>
+              <span class="meta-dot">•</span>
+              <span id="incomingDestHint" class="file-dest-hint">Saves to Downloads</span>
+            </div>
           </div>
-          <a id="incomingDownloadBtn" href="#" class="btn-incoming-download" download>Download File</a>
+          <div class="incoming-actions">
+            <button id="incomingContextBtn" type="button" class="btn-context-action hidden">Open</button>
+            <a id="incomingDownloadBtn" href="#" class="btn-incoming-download" download>Download</a>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { getFileContextMeta } from './file-context.js';
 
 const SESSIONS = new Map();
 const OUTBOUND_FILES = new Map();
@@ -248,11 +249,18 @@ export function unregisterOutboundFile(id) {
  * Lists all files currently shared by the PC.
  */
 export function getOutboundFiles() {
-  return Array.from(OUTBOUND_FILES.values()).map(f => ({
-    id: f.id,
-    name: f.name,
-    size: f.size
-  }));
+  return Array.from(OUTBOUND_FILES.values()).map(f => {
+    const ctx = getFileContextMeta(f.name);
+    return {
+      id: f.id,
+      name: f.name,
+      size: f.size,
+      category: ctx.category,
+      badge: ctx.badge,
+      mime: ctx.mime,
+      inlineSafe: ctx.inlineSafe
+    };
+  });
 }
 
 /**

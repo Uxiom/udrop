@@ -360,8 +360,9 @@ npm install -g @uxiom/udrop</pre>
 
       <!-- Section: Security & Registry -->
       <section id="security" class="doc-section">
-        <h2>12. Security, Privacy &amp; Registry Footprint</h2>
+        <h2>12. Security, Threat Model &amp; Registry Footprint</h2>
         <ul>
+          <li><strong>Local-Only Traffic &amp; Honest Transport Scope:</strong> Transfers stay strictly on your local Wi-Fi or Windows Hotspot—never uploaded to external servers. LAN traffic uses plain HTTP protected by your Wi-Fi encryption (WPA2/WPA3) with no app-layer TLS or pairing PIN yet; use <code>udrop --hotspot</code> or a private hotspot on untrusted public Wi-Fi.</li>
           <li><strong>Zero Elevation Required:</strong> Compiled with <code>asInvoker</code> manifest; no administrator UAC prompt needed.</li>
           <li><strong>User-Space Registry Keys Only:</strong>
             <ul>
@@ -370,18 +371,20 @@ npm install -g @uxiom/udrop</pre>
               <li>Uninstaller Entry: <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\uDrop</code></li>
             </ul>
           </li>
-          <li><strong>Loopback Security Boundary:</strong> Host actions (<code>/api/outbound/register</code>, <code>DELETE /api/outbound/:id</code>, <code>/api/open-folder</code>, <code>/api/open-file</code>, <code>/api/qr/popup</code>, <code>/api/shutdown</code>) strictly reject remote sockets with HTTP <code>403</code>.</li>
+          <li><strong>Loopback Security Boundary:</strong> Host actions (<code>/api/outbound/register</code>, <code>DELETE /api/outbound/:id</code>, <code>/api/open-folder</code>, <code>/api/open-file</code>, <code>/api/qr/popup</code>, <code>/api/shutdown</code>) strictly reject remote sockets with HTTP <code>403</code>, and SVG/HTML/JS files are forced to <code>attachment</code> downloads to prevent stored XSS.</li>
           <li><strong>PID-Safe Shutdown:</strong> Terminates only uDrop's own PID stored in <code>%USERPROFILE%\.udrop\engine.pid</code>.</li>
         </ul>
       </section>
 
       <!-- Section: Troubleshooting -->
       <section id="troubleshooting" class="doc-section">
-        <h2>13. Troubleshooting</h2>
+        <h2>13. OS Quirks, Firewalls &amp; Context Handoff</h2>
         <ul>
-          <li><strong>Phone cannot reach <code>.local</code> address:</strong> Click <strong>Use IP</strong> on the Glass QR Overlay to encode your direct LAN IPv4 address (<code>http://192.168.x.x:4040</code>).</li>
-          <li><strong>Connection blocked on Windows:</strong> Set your Wi-Fi network profile to <strong>Private</strong> and click <strong>Allow access</strong> if Windows Defender Firewall prompts on first transfer.</li>
-          <li><strong>Public / Hotel Wi-Fi blocks peer traffic:</strong> Switch to direct hotspot mode using <code>udrop --hotspot</code> or connect via mobile hotspot.</li>
+          <li><strong>Windows (Firewall &amp; SmartScreen):</strong> Set Wi-Fi to <strong>Private</strong>, allow Node.js on TCP <code>4040</code>, and click <em>More info &rarr; Run anyway</em> if unsigned binary SmartScreen prompts appear. Received items show context buttons (<strong>View</strong> / <strong>Play</strong> / <strong>Import</strong>) plus <strong>Dir</strong> to locate in <code>Downloads\uDrop</code>.</li>
+          <li><strong>iPhone (Safari):</strong> Allow the iOS <em>Local Network</em> permission prompt and disable iCloud Private Relay if <code>.local</code> times out. Tap <strong>Save Photo</strong> / <strong>Add Contact</strong> to hand off images to Photos or <code>.vcf</code> cards to Contacts; archives/docs save to <strong>Files &rarr; Downloads</strong>.</li>
+          <li><strong>Android (Chrome):</strong> Click <strong>Use IP</strong> on the Glass QR Overlay if your device does not resolve <code>.local</code> hostnames, and keep Chrome unthrottled under battery settings during large video batches.</li>
+          <li><strong>macOS &amp; Linux:</strong> Approve <em>System Settings &rarr; Privacy &amp; Security &rarr; Local Network</em> on macOS; on Linux enable <code>avahi-daemon</code> and allow port <code>4040/tcp</code> (<code>ufw allow 4040/tcp</code>).</li>
+          <li><strong>Isolated Guest / Hotel Wi-Fi:</strong> Switch to direct hotspot mode via <code>udrop --hotspot</code>.</li>
         </ul>
       </section>
 
@@ -398,22 +401,22 @@ npm install -g @uxiom/udrop</pre>
 
       <!-- Section: Build -->
       <section id="build-source" class="doc-section">
-        <h2>15. Building, Testing &amp; Embedding (<code>@uxiom/udrop</code>)</h2>
+        <h2>15. Prerequisites, Building &amp; Wire Protocol</h2>
+        <p><strong>Prerequisites:</strong> <code>Node.js &gt;= 18</code> (all platforms) and built-in Windows <code>.NET Framework 4.8</code> (only when compiling <code>udrop.exe</code> / <code>uDrop-Setup.exe</code>).</p>
         <div class="code-block">
           <div class="code-top">
             <span>PowerShell / Shell</span>
             <button class="copy-btn" type="button">Copy</button>
           </div>
-          <pre># Run cross-platform core, mesh, and daemon tests
-npm test
+          <pre>git clone https://github.com/Uxiom/udrop.git &amp;&amp; cd udrop &amp;&amp; npm install
+npm start       # Launch local engine immediately
+npm test        # Cross-platform core, mesh, context &amp; daemon suite
 
-# Bundle web assets and compile udrop.exe + udrop-setup.exe + portable ZIP (Windows)
-.\installer\build-windows.ps1 -CreatePortableZip
-
-# Execute native Windows binary &amp; live EXE verification suite
+# Windows native installer &amp; EXE suite:
+npm run build:win
 npm run test:win</pre>
         </div>
-        <p>Open-source developers can also import <code>startServer</code>, <code>registerOutboundFile</code>, <code>getMeshRing</code>, and <code>generateSleekQrSvg</code> directly from <code>@uxiom/udrop</code> and its subpaths under GPL-3.0.</p>
+        <p>Implementing another client or language? Read the full HTTP, SSE, Chunk Upload, and Range Streaming spec in <a href="https://github.com/Uxiom/udrop/blob/main/PROTOCOL.md" target="_blank" rel="noopener"><code>PROTOCOL.md</code></a>, or import <code>startServer</code>, <code>getFileContextMeta</code>, <code>registerOutboundFile</code>, <code>getMeshRing</code>, and <code>generateSleekQrSvg</code> from <code>@uxiom/udrop</code> under GPL-3.0.</p>
       </section>
 
       <!-- Section: Support & Contact -->

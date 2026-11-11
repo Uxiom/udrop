@@ -256,7 +256,7 @@ program
     console.log(chalk.bold.cyan('  ███   ████  █   █  ███  █     '));
     console.log();
     console.log(chalk.bold.white('[ uDrop ]') + chalk.gray(' — Instant Cross-Platform P2P File Transfer (by Uxiom)'));
-    console.log(chalk.gray('  Zero-router | Encrypted LAN | Resumable 4K streaming | Zero app install on phone'));
+    console.log(chalk.gray('  Zero-router | Direct Local Wi-Fi | Resumable 4K streaming | Zero app install on phone'));
     console.log(chalk.gray('  ─'.repeat(72)));
 
     // Register outbound files passed via CLI

@@ -19,6 +19,7 @@ import {
   closeAllSessions,
   getDownloadDirectory
 } from './transfer.js';
+import { getFileContextMeta } from './file-context.js';
 import {
   registerMeshNode,
   unregisterMeshNode,
@@ -57,7 +58,8 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
   let lastQrScanAt = 0;
 
   function pushRecentCompleted(entry) {
-    recentCompleted.unshift(entry);
+    const ctx = getFileContextMeta(entry.fileName);
+    recentCompleted.unshift({ ...entry, category: ctx.category, badge: ctx.badge });
     if (recentCompleted.length > 12) {
       recentCompleted.length = 12;
     }
@@ -501,7 +503,10 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
         const stat = fs.statSync(file.path);
         const range = req.headers.range;
 
-        // Support Range headers for resumable downloads & media streaming
+        // Support Range headers & safe context-aware Content-Type / inline preview
+        const ctx = getFileContextMeta(file.name);
+        const wantsInline = parsedUrl.searchParams.get('inline') === '1' && ctx.inlineSafe;
+        const disposition = wantsInline ? 'inline' : 'attachment';
         const safeAsciiName = String(file.name || 'download').replace(/[\r\n"\\]/g, '_');
         const safeName = encodeURIComponent(file.name);
         if (range) {
@@ -527,16 +532,16 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
             'Content-Range': `bytes ${start}-${end}/${stat.size}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${safeAsciiName}"; filename*=UTF-8''${safeName}`
+            'Content-Type': ctx.mime,
+            'Content-Disposition': `${disposition}; filename="${safeAsciiName}"; filename*=UTF-8''${safeName}`
           });
           stream.pipe(res);
         } else {
           res.writeHead(200, {
             'Accept-Ranges': 'bytes',
             'Content-Length': stat.size,
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${safeAsciiName}"; filename*=UTF-8''${safeName}`
+            'Content-Type': ctx.mime,
+            'Content-Disposition': `${disposition}; filename="${safeAsciiName}"; filename*=UTF-8''${safeName}`
           });
           fs.createReadStream(file.path, { highWaterMark: 128 * 1024 }).pipe(res);
         }

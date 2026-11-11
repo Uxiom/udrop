@@ -943,9 +943,10 @@ namespace UDrop {
                     Rectangle rowRect = new Rectangle(10, y, w, 54);
                     DrawCardBox(g, rowRect, Color.FromArgb(26, 26, 34), Color.FromArgb(52, 52, 64));
 
+                    string tag = GetFileCategoryTag(item.FileName);
                     string title = item.TotalFiles > 1
-                        ? string.Format("[{0}/{1}] {2}", item.QueueIndex, item.TotalFiles, item.FileName)
-                        : item.FileName;
+                        ? string.Format("[{0}] [{1}/{2}] {3}", tag, item.QueueIndex, item.TotalFiles, item.FileName)
+                        : string.Format("[{0}] {1}", tag, item.FileName);
                     DrawClippedText(g, title, 9f, FontStyle.Bold, Color.FromArgb(250, 250, 250), new Rectangle(20, y + 6, w - 88, 18));
 
                     string speedTxt = item.SpeedBps > 0
@@ -979,7 +980,8 @@ namespace UDrop {
                     Rectangle rowRect = new Rectangle(10, y, w, 34);
                     DrawCardBox(g, rowRect, Color.FromArgb(22, 22, 28), Color.FromArgb(42, 42, 52));
 
-                    DrawClippedText(g, ob.Name, 8.5f, FontStyle.Bold, Color.FromArgb(244, 244, 245), new Rectangle(18, y + 8, w - 96, 18));
+                    string obLabel = string.Format("[{0}] {1}", GetFileCategoryTag(ob.Name), ob.Name);
+                    DrawClippedText(g, obLabel, 8.5f, FontStyle.Bold, Color.FromArgb(244, 244, 245), new Rectangle(18, y + 8, w - 96, 18));
                     DrawRightText(g, FormatBytes(ob.Size), 7.75f, FontStyle.Regular, Color.FromArgb(161, 161, 170), new Rectangle(18, y + 9, w - 52, 16));
 
                     Rectangle unshareBtn = new Rectangle(10 + w - 28, y + 6, 22, 22);
@@ -992,7 +994,7 @@ namespace UDrop {
 
             // Section C: Recent Completed / Cancelled Transfers
             if (completedItems.Count > 0 && y < feedCanvasPanel.Height - 36) {
-                y = DrawSectionHeader(g, "RECENTLY RECEIVED ON THIS PC", 10, y);
+                y = DrawSectionHeader(g, "RECEIVED IN DOWNLOADS\\UDROP", 10, y);
                 for (int i = 0; i < completedItems.Count && y < feedCanvasPanel.Height - 32; i++) {
                     CompletedTransferItem ct = completedItems[i];
                     Rectangle rowRect = new Rectangle(10, y, w, 36);
@@ -1000,13 +1002,19 @@ namespace UDrop {
 
                     bool cancelled = ct.Status == "cancelled";
                     Color pillCol = cancelled ? Color.FromArgb(248, 113, 113) : Color.FromArgb(74, 222, 128);
-                    string line = string.Format("{0}  ({1})", ct.FileName, FormatBytes(ct.FileSize));
-                    DrawClippedText(g, line, 8.25f, FontStyle.Bold, cancelled ? Color.FromArgb(161, 161, 170) : Color.FromArgb(244, 244, 245), new Rectangle(18, y + 9, w - 82, 18));
+                    string catTag = GetFileCategoryTag(ct.FileName);
+                    string line = string.Format("[{0}] {1} ({2})", catTag, ct.FileName, FormatBytes(ct.FileSize));
+                    DrawClippedText(g, line, 8.25f, FontStyle.Bold, cancelled ? Color.FromArgb(161, 161, 170) : Color.FromArgb(244, 244, 245), new Rectangle(18, y + 9, w - 118, 18));
 
                     if (!cancelled && !string.IsNullOrEmpty(ct.FilePath)) {
-                        Rectangle openBtn = new Rectangle(10 + w - 56, y + 7, 48, 22);
-                        DrawActionPill(g, openBtn, "Open", Color.FromArgb(250, 250, 250), Color.FromArgb(9, 9, 11));
-                        feedHits.Add(new FeedHitRegion { Bounds = openBtn, Kind = "open", Payload = ct.FilePath });
+                        string verb = GetContextActionVerb(catTag);
+                        Rectangle openBtn = new Rectangle(10 + w - 98, y + 7, 52, 22);
+                        DrawActionPill(g, openBtn, verb, Color.FromArgb(250, 250, 250), Color.FromArgb(9, 9, 11));
+                        feedHits.Add(new FeedHitRegion { Bounds = openBtn, Kind = "launch", Payload = ct.FilePath });
+
+                        Rectangle dirBtn = new Rectangle(10 + w - 40, y + 7, 34, 22);
+                        DrawActionPill(g, dirBtn, "Dir", Color.FromArgb(36, 36, 46), Color.FromArgb(212, 212, 216));
+                        feedHits.Add(new FeedHitRegion { Bounds = dirBtn, Kind = "open", Payload = ct.FilePath });
                     } else {
                         DrawRightText(g, cancelled ? "Cancelled" : "Done", 7.75f, FontStyle.Bold, pillCol, new Rectangle(18, y + 10, w - 18, 16));
                     }
@@ -1085,7 +1093,9 @@ namespace UDrop {
                 FeedHitRegion hit = feedHits[i];
                 if (!hit.Bounds.Contains(e.Location)) continue;
 
-                if (hit.Kind == "open") {
+                if (hit.Kind == "launch") {
+                    OpenFileWithDefaultApp(hit.Payload);
+                } else if (hit.Kind == "open") {
                     RevealFileInExplorer(hit.Payload);
                 } else if (hit.Kind == "unshare") {
                     UnshareOutboundFile(hit.Payload);
@@ -1143,6 +1153,36 @@ namespace UDrop {
                 } catch {}
                 PollOverlayState();
             });
+        }
+
+        private static string GetFileCategoryTag(string fileName) {
+            string ext = (Path.GetExtension(fileName ?? "") ?? "").ToLowerInvariant();
+            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".gif" || ext == ".heic" || ext == ".heif" || ext == ".bmp" || ext == ".avif") return "PHOTO";
+            if (ext == ".mp4" || ext == ".m4v" || ext == ".mov" || ext == ".webm" || ext == ".mkv") return "VIDEO";
+            if (ext == ".vcf" || ext == ".vcard") return "CONTACT";
+            if (ext == ".pdf") return "PDF";
+            if (ext == ".mp3" || ext == ".m4a" || ext == ".wav" || ext == ".aac" || ext == ".ogg" || ext == ".flac") return "AUDIO";
+            if (ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz") return "ZIP";
+            return "FILE";
+        }
+
+        private static string GetContextActionVerb(string tag) {
+            if (tag == "PHOTO" || tag == "PDF") return "View";
+            if (tag == "VIDEO" || tag == "AUDIO") return "Play";
+            if (tag == "CONTACT") return "Import";
+            return "Open";
+        }
+
+        private void OpenFileWithDefaultApp(string filePath) {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
+            try {
+                Process.Start(new ProcessStartInfo {
+                    FileName = filePath,
+                    UseShellExecute = true
+                });
+            } catch {
+                RevealFileInExplorer(filePath);
+            }
         }
 
         private void RevealFileInExplorer(string filePath) {

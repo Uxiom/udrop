@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { getFileContextMeta } from './file-context.js';
 
 const SLOTS = ['U', 'X', 'I', 'O', 'M'];
 const MESH_NODES = new Map();
@@ -220,6 +221,7 @@ export function broadcastHostTransferEvent(event) {
  * e.g. Phone [O] (iPhone) sends 4K video to Phone [X] (Android) via Host [U].
  */
 export function dispatchMeshTransfer({ fromSlot, toSlot, fileName, fileSize, downloadUrl }) {
+  const ctx = getFileContextMeta(fileName);
   const payload = JSON.stringify({
     type: 'incoming_mesh_transfer',
     transfer: {
@@ -228,6 +230,10 @@ export function dispatchMeshTransfer({ fromSlot, toSlot, fileName, fileSize, dow
       fileName,
       fileSize,
       downloadUrl,
+      category: ctx.category,
+      badge: ctx.badge,
+      mime: ctx.mime,
+      inlineSafe: ctx.inlineSafe,
       timestamp: Date.now()
     }
   });

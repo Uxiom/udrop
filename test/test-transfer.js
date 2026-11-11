@@ -449,6 +449,63 @@ async function runTests() {
       'Repository contains zero unused/leaked temporary or template artifacts'
     );
 
+    // -------------------------------------------------------------
+    // Test 10: Context-Aware MIME & Safe Inline Handoff (Plus Protocol Doc)
+    // -------------------------------------------------------------
+    const tmpPhoto = path.join(os.tmpdir(), 'udrop-sample.jpg');
+    const tmpVcf = path.join(os.tmpdir(), 'udrop-card.vcf');
+    const tmpSvg = path.join(os.tmpdir(), 'udrop-vector.svg');
+    fs.writeFileSync(tmpPhoto, 'fake-jpeg-bytes');
+    fs.writeFileSync(tmpVcf, 'BEGIN:VCARD\nVERSION:3.0\nFN:Uxiom Support\nEND:VCARD');
+    fs.writeFileSync(tmpSvg, '<svg><script>alert(1)</script></svg>');
+
+    const outPhoto = registerOutboundFile(tmpPhoto);
+    const outVcf = registerOutboundFile(tmpVcf);
+    const outSvg = registerOutboundFile(tmpSvg);
+    try {
+      const filesRes = await fetch(`${BASE_URL}/api/files`);
+      const filesList = await filesRes.json();
+      const photoMeta = filesList.find(f => f.id === outPhoto.id);
+      const vcfMeta = filesList.find(f => f.id === outVcf.id);
+      const svgMeta = filesList.find(f => f.id === outSvg.id);
+
+      assert(photoMeta && photoMeta.category === 'photo' && photoMeta.badge === 'PHOTO' && photoMeta.inlineSafe === true, '/api/files tags photo context metadata');
+      assert(vcfMeta && vcfMeta.category === 'contact' && vcfMeta.badge === 'CONTACT' && vcfMeta.mime.includes('text/vcard'), '/api/files tags vCard contact context metadata');
+      assert(svgMeta && svgMeta.inlineSafe === false && svgMeta.mime === 'application/octet-stream', '/api/files restricts untrusted SVG from inline disposition');
+
+      const inlinePhotoRes = await fetch(`${BASE_URL}/api/download/${outPhoto.id}?inline=1`);
+      assert(
+        inlinePhotoRes.status === 200 &&
+        inlinePhotoRes.headers.get('content-type') === 'image/jpeg' &&
+        (inlinePhotoRes.headers.get('content-disposition') || '').startsWith('inline;'),
+        'Photo ?inline=1 serves image/jpeg inline disposition'
+      );
+
+      const inlineVcfRes = await fetch(`${BASE_URL}/api/download/${outVcf.id}?inline=1`);
+      assert(
+        inlineVcfRes.status === 200 &&
+        (inlineVcfRes.headers.get('content-type') || '').includes('text/vcard') &&
+        (inlineVcfRes.headers.get('content-disposition') || '').startsWith('inline;'),
+        'vCard ?inline=1 serves text/vcard inline for OS Contacts handoff'
+      );
+
+      const inlineSvgRes = await fetch(`${BASE_URL}/api/download/${outSvg.id}?inline=1`);
+      assert(
+        inlineSvgRes.status === 200 &&
+        inlineSvgRes.headers.get('content-type') === 'application/octet-stream' &&
+        (inlineSvgRes.headers.get('content-disposition') || '').startsWith('attachment;'),
+        'Untrusted .svg forces attachment + octet-stream even with ?inline=1'
+      );
+
+      const appJsText = await (await fetch(`${BASE_URL}/app.js`)).text();
+      assert(appJsText.includes('getClientFileContext') && appJsText.includes('Save Photo') && appJsText.includes('Add Contact'), 'Web UI includes context-aware handoff actions');
+      assert(fs.existsSync(path.join(process.cwd(), 'PROTOCOL.md')), 'Repository ships explicit PROTOCOL.md wire spec');
+    } finally {
+      fs.rmSync(tmpPhoto, { force: true });
+      fs.rmSync(tmpVcf, { force: true });
+      fs.rmSync(tmpSvg, { force: true });
+    }
+
   } finally {
     if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
     server.close();
