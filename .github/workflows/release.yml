@@ -42,7 +42,8 @@ jobs:
       - name: Generate SHA-256 checksums
         shell: pwsh
         run: |
-          Copy-Item .\dist\udrop-setup.exe .\dist\uDrop-Setup.exe -Force
+          Move-Item .\dist\udrop-setup.exe .\dist\tmp-setup.exe -Force
+          Move-Item .\dist\tmp-setup.exe .\dist\uDrop-Setup.exe -Force
           $files = @(".\dist\uDrop-Setup.exe", ".\dist\uDrop-Portable-win64.zip")
           $lines = foreach ($f in $files) {
             $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
