@@ -1,7 +1,21 @@
 import fs from 'node:fs';
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 let lastLaunchTime = 0;
+
+function launchDetached(cmd, args = []) {
+  try {
+    const child = spawn(cmd, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.unref();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
 /**
  * Automatically launches the Liquid Glass Dynamic Island HUD as a clean,
@@ -9,6 +23,14 @@ let lastLaunchTime = 0;
  * Zero browser tabs, zero address bar, behaves like a native desktop widget.
  */
 export function launchDesktopOverlay(port = 4040) {
+  if (
+    process.env.CI === 'true' ||
+    process.env.UDROP_NO_GUI === '1' ||
+    process.env.UDROP_NATIVE_OVERLAY === '1'
+  ) {
+    return false;
+  }
+
   const now = Date.now();
   // Debounce: prevent multiple windows spawning within 10 seconds
   if (now - lastLaunchTime < 10000) {
@@ -17,6 +39,7 @@ export function launchDesktopOverlay(port = 4040) {
   lastLaunchTime = now;
 
   const url = `http://localhost:${port}/island`;
+  const appArgs = [`--app=${url}`, '--window-size=540,150', '--window-position=500,20'];
 
   if (process.platform === 'win32') {
     const chromePaths = [
@@ -30,25 +53,22 @@ export function launchDesktopOverlay(port = 4040) {
 
     for (const p of chromePaths) {
       if (fs.existsSync(p)) {
-        exec(`"${p}" --app="${url}" --window-size=540,150 --window-position=500,20`);
-        return true;
+        return launchDetached(p, appArgs);
       }
     }
 
     for (const p of edgePaths) {
       if (fs.existsSync(p)) {
-        exec(`"${p}" --app="${url}" --window-size=540,150 --window-position=500,20`);
-        return true;
+        return launchDetached(p, appArgs);
       }
     }
 
-    exec(`start ${url}`);
-    return true;
+    return launchDetached('cmd.exe', ['/c', 'start', '""', url]);
   } else if (process.platform === 'darwin') {
-    exec(`open -na "Google Chrome" --args --app="${url}" || open "${url}"`);
-    return true;
+    return launchDetached('open', ['-na', 'Google Chrome', '--args', `--app=${url}`]) ||
+      launchDetached('open', [url]);
   } else {
-    exec(`google-chrome --app="${url}" || xdg-open "${url}"`);
-    return true;
+    return launchDetached('google-chrome', [`--app=${url}`]) ||
+      launchDetached('xdg-open', [url]);
   }
 }

@@ -72,6 +72,7 @@ try {
     installer\Launcher.cs `
     installer\TrayFlyoutForm.cs `
     installer\GlassQrOverlayForm.cs
+  if ($LASTEXITCODE -ne 0) { throw "Failed to compile dist/udrop.exe" }
 
   Write-Host "[4/5] Creating embedded uDropPayload.zip..."
   $tempPayloadDir = Join-Path $env:TEMP ("udrop-payload-" + [guid]::NewGuid().ToString("N"))
@@ -105,6 +106,7 @@ try {
       /r:System.IO.Compression.FileSystem.dll `
       installer\AssemblyInfo.cs `
       installer\Installer.cs
+    if ($LASTEXITCODE -ne 0) { throw "Failed to compile dist/udrop-setup.exe" }
 
     if ($CreatePortableZip) {
       $portableZip = Join-Path $DistDir "uDrop-Portable-win64.zip"

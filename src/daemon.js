@@ -113,6 +113,7 @@ export async function startDaemon({ port = 4040, binPath } = {}) {
     env: process.env
   });
 
+  try { fs.closeSync(out); } catch (e) {}
   child.unref();
   const childPid = child.pid;
 

@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import QRCode from 'qrcode';
@@ -203,23 +203,43 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
         return;
       }
 
-      // Helper: Launch Windows Explorer or OS file manager using robust absolute paths
+      // Helper: Launch Windows Explorer or OS file manager cleanly without inheriting Node pipes
       const openInExplorer = (target, isSelect = false) => {
-        if (process.platform === 'win32') {
-          const winDir = process.env.WINDIR || 'C:\\Windows';
-          const explorerPath = fs.existsSync(path.join(winDir, 'explorer.exe'))
-            ? path.join(winDir, 'explorer.exe')
-            : 'explorer.exe';
-          if (isSelect) {
-            exec(`"${explorerPath}" /select,"${target}"`);
-          } else {
-            exec(`"${explorerPath}" "${target}"`);
-          }
-        } else if (process.platform === 'darwin') {
-          exec(isSelect ? `open -R "${target}"` : `open "${target}"`);
-        } else {
-          exec(`xdg-open "${isSelect ? path.dirname(target) : target}"`);
+        if (process.env.CI === 'true' || process.env.UDROP_NO_GUI === '1') {
+          return;
         }
+        try {
+          let child;
+          if (process.platform === 'win32') {
+            const winDir = process.env.WINDIR || 'C:\\Windows';
+            const explorerPath = fs.existsSync(path.join(winDir, 'explorer.exe'))
+              ? path.join(winDir, 'explorer.exe')
+              : 'explorer.exe';
+            if (isSelect) {
+              child = spawn(explorerPath, [`/select,"${target}"`], {
+                detached: true,
+                stdio: 'ignore',
+                windowsVerbatimArguments: true
+              });
+            } else {
+              child = spawn(explorerPath, [target], {
+                detached: true,
+                stdio: 'ignore'
+              });
+            }
+          } else if (process.platform === 'darwin') {
+            child = spawn('open', isSelect ? ['-R', target] : [target], {
+              detached: true,
+              stdio: 'ignore'
+            });
+          } else {
+            child = spawn('xdg-open', [isSelect ? path.dirname(target) : target], {
+              detached: true,
+              stdio: 'ignore'
+            });
+          }
+          if (child) child.unref();
+        } catch {}
       };
 
       // API: Open Downloads/uDrop Folder in Windows Explorer / OS Manager (Loopback-only)
@@ -458,6 +478,9 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, shuttingDown: true }));
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
         server.close();
         if (onShutdown) {
           onShutdown(server);

@@ -33,6 +33,7 @@ jobs:
 
       - name: Run full verification test suite
         shell: pwsh
+        timeout-minutes: 5
         run: |
           npm test
           npm run test:win

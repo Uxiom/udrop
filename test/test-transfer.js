@@ -342,6 +342,7 @@ async function runTests() {
       const sdJson = await sdRes.json();
       assert(sdJson.shuttingDown === true && shutdownTriggered === true, 'Shutdown triggers clean lifecycle hook');
     } finally {
+      if (typeof shutdownServer.closeAllConnections === 'function') shutdownServer.closeAllConnections();
       shutdownServer.close();
     }
 
@@ -449,6 +450,7 @@ async function runTests() {
     );
 
   } finally {
+    if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
     server.close();
   }
 
