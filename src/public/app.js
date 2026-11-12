@@ -27,9 +27,8 @@ const transferStatus = document.getElementById('transferStatus');
 const cancelTransferBtn = document.getElementById('cancelTransferBtn');
 const hostFilesList = document.getElementById('hostFilesList');
 
-let currentUploadAbortController = null;
+const activeUploadSessions = new Map(); // fileId -> AbortController
 let isCurrentTransferCancelled = false;
-let currentUploadFileId = null;
 const refreshFilesBtn = document.getElementById('refreshFilesBtn');
 
 // UXIOM Mesh DOM Elements
@@ -66,6 +65,63 @@ let currentHostTransfer = null;
 let lastReceivedFile = null;
 let islandAudioCtx = null;
 
+// Receive Notification Toast State
+const receiveToast = document.getElementById('receiveToast');
+const receiveToastIcon = document.getElementById('receiveToastIcon');
+const receiveToastBadge = document.getElementById('receiveToastBadge');
+const receiveToastTitle = document.getElementById('receiveToastTitle');
+const receiveToastName = document.getElementById('receiveToastName');
+const receiveToastMeta = document.getElementById('receiveToastMeta');
+const receiveToastActionBtn = document.getElementById('receiveToastActionBtn');
+const receiveToastCloseBtn = document.getElementById('receiveToastCloseBtn');
+let receiveToastTimer = null;
+let currentToastAction = null;
+const seenOutboundIds = new Set();
+let outboundBaselineReady = false;
+const recentlyUploadedNames = new Map();
+
+// Offline Inline Lucide Icons (HIG SF-Symbols web equivalent)
+const LUCIDE_PATHS = {
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>',
+  video: '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect>',
+  music: '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>',
+  'user-plus': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line>',
+  'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
+  'file-archive': '<path d="M10 12v-1"></path><path d="M10 18v-2"></path><path d="M10 7V6"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M15.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 .274 1.01"></path><circle cx="10" cy="20" r="2"></circle>',
+  'folder-open': '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path>',
+  'external-link': '<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"></polygon>',
+  x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>'
+};
+
+function renderLucideSvg(name, size = 14, strokeWidth = 2) {
+  const paths = LUCIDE_PATHS[name] || LUCIDE_PATHS.download;
+  return `<svg class="lucide lucide-${name}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+function getCategoryLucideName(category) {
+  switch (category) {
+    case 'photo': return 'image';
+    case 'video': return 'video';
+    case 'contact': return 'user-plus';
+    case 'pdf':
+    case 'doc': return 'file-text';
+    case 'audio': return 'music';
+    case 'archive': return 'file-archive';
+    default: return 'download';
+  }
+}
+
+function getActionLucideName(ctx, actionLabel) {
+  if (actionLabel === 'Show') return 'folder-open';
+  if (!ctx) return 'download';
+  if (ctx.category === 'contact') return 'user-plus';
+  if (ctx.category === 'pdf') return 'external-link';
+  if (ctx.category === 'audio') return 'play';
+  return 'download';
+}
+
 // UXIOM Mesh State
 let myClientId = localStorage.getItem('udrop_mesh_client_id');
 if (!myClientId) {
@@ -75,7 +131,81 @@ if (!myClientId) {
 
 let mySlot = null; // 'X', 'I', 'O', 'M' or 'U'
 let targetSlot = 'U'; // Default recipient: Host [ U ]
+let userPickedTarget = false;
 let currentRingState = [];
+let meshEventSource = null;
+let leaveBeaconSent = false;
+
+function hideReceiveToast() {
+  if (!receiveToast) return;
+  receiveToast.classList.add('hidden');
+  receiveToast.classList.remove('is-clickable');
+  currentToastAction = null;
+  if (receiveToastTimer) {
+    clearTimeout(receiveToastTimer);
+    receiveToastTimer = null;
+  }
+}
+
+function showReceiveToast({ title, fileName, meta, badge, category, actionLabel, actionIcon, onAction }) {
+  if (!receiveToast) return;
+  if (receiveToastTitle) receiveToastTitle.textContent = title || 'File Received';
+  if (receiveToastName) receiveToastName.textContent = fileName || 'Transfer Complete';
+  if (receiveToastMeta) receiveToastMeta.textContent = meta || '';
+  if (receiveToastBadge) receiveToastBadge.textContent = badge || 'FILE';
+  if (receiveToastIcon) {
+    const appIconName = getCategoryLucideName(category);
+    receiveToastIcon.setAttribute('data-lucide', appIconName);
+    receiveToastIcon.innerHTML = renderLucideSvg(appIconName, 18, 2);
+  }
+
+  currentToastAction = typeof onAction === 'function' ? onAction : null;
+  receiveToast.classList.toggle('is-clickable', Boolean(currentToastAction));
+  if (receiveToastActionBtn) {
+    if (actionLabel && currentToastAction) {
+      const iconName = actionIcon || getActionLucideName({ category }, actionLabel);
+      receiveToastActionBtn.innerHTML = `${renderLucideSvg(iconName, 13, 2.2)}<span>${escapeHtml(actionLabel)}</span>`;
+      receiveToastActionBtn.classList.remove('hidden');
+    } else {
+      receiveToastActionBtn.classList.add('hidden');
+    }
+  }
+
+  receiveToast.classList.remove('hidden');
+  playSuccessChime();
+  if (navigator.vibrate) {
+    try { navigator.vibrate([80, 40, 80]); } catch {}
+  }
+
+  if (receiveToastTimer) clearTimeout(receiveToastTimer);
+  receiveToastTimer = setTimeout(hideReceiveToast, 6500);
+}
+
+if (receiveToastCloseBtn) {
+  receiveToastCloseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideReceiveToast();
+  });
+}
+
+if (receiveToastActionBtn) {
+  receiveToastActionBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const fn = currentToastAction;
+    hideReceiveToast();
+    if (fn) fn();
+  });
+}
+
+if (receiveToast) {
+  receiveToast.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#receiveToastCloseBtn')) return;
+    if (!currentToastAction) return;
+    const fn = currentToastAction;
+    hideReceiveToast();
+    fn();
+  });
+}
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -206,7 +336,7 @@ async function triggerContextSaveAction(downloadUrl, fileName, fileSize, ctx, bt
     typeof navigator.canShare === 'function' &&
     (!fileSize || fileSize <= 120 * 1024 * 1024)
   ) {
-    const prevLabel = btnEl ? btnEl.textContent : '';
+    const prevHtml = btnEl ? btnEl.innerHTML : '';
     try {
       if (btnEl) {
         btnEl.disabled = true;
@@ -224,7 +354,7 @@ async function triggerContextSaveAction(downloadUrl, fileName, fileSize, ctx, bt
     } finally {
       if (btnEl) {
         btnEl.disabled = false;
-        btnEl.textContent = prevLabel;
+        btnEl.innerHTML = prevHtml;
       }
     }
   }
@@ -267,11 +397,40 @@ async function loadHostFiles() {
     const res = await fetch('/api/files');
     const files = await res.json();
     if (!files || files.length === 0) {
+      outboundBaselineReady = true;
       hostFilesList.innerHTML = '<p class="empty-state">No files currently shared by the host.</p>';
       return;
     }
 
     const canUnshare = isLocalHostPage();
+    if (!outboundBaselineReady) {
+      files.forEach(f => seenOutboundIds.add(f.id));
+      outboundBaselineReady = true;
+    } else if (!canUnshare) {
+      const nowMs = Date.now();
+      for (const [n, ts] of recentlyUploadedNames.entries()) {
+        if (nowMs - ts > 15000) recentlyUploadedNames.delete(n);
+      }
+      const newlyShared = files.find(f => !seenOutboundIds.has(f.id) && !recentlyUploadedNames.has(f.name));
+      files.forEach(f => seenOutboundIds.add(f.id));
+      if (newlyShared) {
+        const nCtx = getClientFileContext(newlyShared.name, newlyShared);
+        const dlUrl = `/api/download/${encodeURIComponent(newlyShared.id)}`;
+        const actLabel = nCtx.actionLabel || 'Download';
+        showReceiveToast({
+          title: 'File Received from Host',
+          fileName: newlyShared.name,
+          meta: `${formatBytes(newlyShared.size)} • ${nCtx.hint}`,
+          badge: nCtx.badge,
+          category: nCtx.category,
+          actionLabel: actLabel,
+          actionIcon: getActionLucideName(nCtx, actLabel),
+          onAction: () => triggerContextSaveAction(dlUrl, newlyShared.name, newlyShared.size, nCtx, receiveToastActionBtn)
+        });
+      }
+    } else {
+      files.forEach(f => seenOutboundIds.add(f.id));
+    }
     hostFilesList.innerHTML = files.map(f => {
       const safeName = escapeHtml(f.name);
       const safeId = encodeURIComponent(f.id);
@@ -279,13 +438,14 @@ async function loadHostFiles() {
       const ctx = getClientFileContext(f.name, f);
       const thumbHtml = ctx.category === 'photo'
         ? `<div class="file-thumb-box"><img src="${downloadUrl}?inline=1" class="file-thumb" loading="lazy" alt=""></div>`
-        : `<div class="file-thumb-box file-thumb-badge">${escapeHtml(ctx.iconLabel)}</div>`;
+        : `<div class="file-thumb-box file-thumb-badge">${renderLucideSvg(getCategoryLucideName(ctx.category), 18, 1.9)}</div>`;
+      const actionIconHtml = renderLucideSvg(getActionLucideName(ctx, ctx.actionLabel), 13, 2.2);
       const actionHtml = ctx.actionLabel
         ? (ctx.actionKind === 'inline-link' && ctx.inlineSafe
-            ? `<a href="${downloadUrl}?inline=1" class="btn-context-action">${escapeHtml(ctx.actionLabel)}</a>`
+            ? `<a href="${downloadUrl}?inline=1" class="btn-context-action">${actionIconHtml}<span>${escapeHtml(ctx.actionLabel)}</span></a>`
             : (ctx.actionKind === 'inline-tab' && ctx.inlineSafe
-                ? `<a href="${downloadUrl}?inline=1" target="_blank" rel="noopener" class="btn-context-action">${escapeHtml(ctx.actionLabel)}</a>`
-                : `<button type="button" class="btn-context-action js-context-save" data-url="${downloadUrl}" data-name="${safeName}" data-size="${Number(f.size) || 0}" data-cat="${escapeHtml(ctx.category)}" data-mime="${escapeHtml(ctx.mime)}">${escapeHtml(ctx.actionLabel)}</button>`))
+                ? `<a href="${downloadUrl}?inline=1" target="_blank" rel="noopener" class="btn-context-action">${actionIconHtml}<span>${escapeHtml(ctx.actionLabel)}</span></a>`
+                : `<button type="button" class="btn-context-action js-context-save" data-url="${downloadUrl}" data-name="${safeName}" data-size="${Number(f.size) || 0}" data-cat="${escapeHtml(ctx.category)}" data-mime="${escapeHtml(ctx.mime)}">${actionIconHtml}<span>${escapeHtml(ctx.actionLabel)}</span></button>`))
         : '';
 
       return `
@@ -304,8 +464,8 @@ async function loadHostFiles() {
         </div>
         <div class="file-row-actions">
           ${actionHtml}
-          <a href="${downloadUrl}" class="btn-download" download>Download</a>
-          ${canUnshare ? `<button type="button" class="btn-unshare" data-unshare-id="${safeId}" title="Remove from shared list">&times;</button>` : ''}
+          <a href="${downloadUrl}" class="btn-download" download>${renderLucideSvg('download', 13, 2.2)}<span>Download</span></a>
+          ${canUnshare ? `<button type="button" class="btn-unshare" data-unshare-id="${safeId}" title="Remove from shared list" aria-label="Remove ${safeName} from shared list">${renderLucideSvg('x', 13, 2.2)}</button>` : ''}
         </div>
       </div>
     `;
@@ -342,6 +502,7 @@ async function loadHostFiles() {
 
 // 3. UXIOM Mesh Ring Management
 async function joinMesh() {
+  leaveBeaconSent = false;
   try {
     const isHost = isLocalHostPage();
     const res = await fetch('/api/mesh/join', {
@@ -371,54 +532,168 @@ async function joinMesh() {
   }
 }
 
+const MESH_LAYOUT = {
+  U: { x: 200, y: 112, left: '50%', top: '50%', isHub: true },
+  X: { x: 78, y: 48, left: '19.5%', top: '21.4%', path: 'M 200 112 Q 142 54 78 48' },
+  I: { x: 322, y: 48, left: '80.5%', top: '21.4%', path: 'M 200 112 Q 258 54 322 48' },
+  O: { x: 78, y: 176, left: '19.5%', top: '78.6%', path: 'M 200 112 Q 142 170 78 176' },
+  M: { x: 322, y: 176, left: '80.5%', top: '78.6%', path: 'M 200 112 Q 258 170 322 176' }
+};
+
 function renderRing(ring) {
   if (!meshRing) return;
   currentRingState = ring || [];
   meshRing.innerHTML = '';
 
-  ring.forEach(node => {
+  const nodeMap = {};
+  currentRingState.forEach(n => { nodeMap[n.slot] = n; });
+
+  const assignedPeersList = currentRingState.filter(n => n.slot !== 'U' && n.assigned);
+  const assignedPeers = assignedPeersList.length;
+
+  // Reset target cleanly if selected device disconnected, and sync host/peer auto-routing
+  const targetNode = nodeMap[targetSlot];
+  const targetDisconnected = (targetSlot !== 'U' && targetSlot !== 'ALL' && (!targetNode || !targetNode.assigned || targetSlot === mySlot));
+
+  if (targetDisconnected) {
+    userPickedTarget = false;
+    if (mySlot === 'U' && assignedPeers > 0) {
+      const firstPeer = assignedPeersList[0];
+      targetSlot = firstPeer.slot;
+      if (targetNodeText) targetNodeText.textContent = `[ ${firstPeer.slot} ] ${firstPeer.name}`;
+      if (dropzoneActionText) dropzoneActionText.textContent = `Tap or Drag to Beam to [ ${firstPeer.slot} ] ${firstPeer.name}`;
+    } else {
+      targetSlot = 'U';
+      if (targetNodeText) targetNodeText.textContent = '[ U ] Master Host';
+      if (dropzoneActionText) dropzoneActionText.textContent = 'Tap or Drag Files to Stream';
+    }
+  } else if (mySlot === 'U' && !userPickedTarget) {
+    if (assignedPeers > 0 && targetSlot === 'U') {
+      const firstPeer = assignedPeersList[0];
+      targetSlot = firstPeer.slot;
+      if (targetNodeText) targetNodeText.textContent = `[ ${firstPeer.slot} ] ${firstPeer.name}`;
+      if (dropzoneActionText) dropzoneActionText.textContent = `Tap or Drag to Beam to [ ${firstPeer.slot} ] ${firstPeer.name}`;
+    } else if (assignedPeers === 0 && targetSlot !== 'U' && targetSlot !== 'ALL') {
+      targetSlot = 'U';
+      if (targetNodeText) targetNodeText.textContent = '[ U ] Master Host';
+      if (dropzoneActionText) dropzoneActionText.textContent = 'Tap or Drag Files to Stream';
+    }
+  }
+
+  const diagram = document.createElement('div');
+  diagram.className = 'mesh-diagram';
+
+  // True geometric circles in CSS (unaffected by container aspect differences across phone/laptop)
+  const innerSonar = document.createElement('div');
+  innerSonar.className = 'mesh-sonar-ring mesh-sonar-inner';
+  diagram.appendChild(innerSonar);
+  const outerSonar = document.createElement('div');
+  outerSonar.className = 'mesh-sonar-ring mesh-sonar-outer';
+  diagram.appendChild(outerSonar);
+
+  // SVG Hub & Spoke Linking Layer
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('class', 'mesh-links-svg');
+  svg.setAttribute('viewBox', '0 0 400 224');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+
+  const guideHtml = [
+    '<path d="M 78 48 L 322 48 L 322 176 L 78 176 Z" class="mesh-link-perimeter" />'
+  ];
+
+  ['X', 'I', 'O', 'M'].forEach(slot => {
+    const pos = MESH_LAYOUT[slot];
+    const node = nodeMap[slot] || { slot, assigned: false };
+    const isArmed =
+      (node.assigned && targetSlot === 'ALL') ||
+      (mySlot === 'U' && targetSlot === slot && node.assigned) ||
+      (mySlot === slot && targetSlot === 'U') ||
+      (mySlot === slot && targetSlot !== 'U' && targetSlot !== slot) ||
+      (targetSlot === slot && mySlot !== 'U' && node.assigned);
+
+    const linkClass = isArmed
+      ? 'mesh-link-path mesh-link-armed'
+      : (node.assigned ? 'mesh-link-path mesh-link-online' : 'mesh-link-path mesh-link-idle');
+
+    guideHtml.push(`<path d="${pos.path}" class="${linkClass}" />`);
+    if (isArmed) {
+      guideHtml.push(`<circle cx="${pos.x}" cy="${pos.y}" r="4" class="mesh-link-endpoint" />`);
+    }
+  });
+
+  svg.innerHTML = guideHtml.join('');
+  diagram.appendChild(svg);
+
+  // Interactive Nodes anchored to SVG endpoints
+  currentRingState.forEach(node => {
+    const pos = MESH_LAYOUT[node.slot];
+    if (!pos) return;
+
     const isSelf = (node.slot === mySlot);
     const isTarget = (node.slot === targetSlot);
-    const safeNodeName = escapeHtml(node.assigned ? node.name : 'Empty');
+    const rawName = node.assigned ? node.name.replace(/\s*\(Host\)\s*$/i, '') : 'Waiting';
+    const shortName = rawName.length > 22 ? rawName.slice(0, 20) + '...' : rawName;
+    const safeNodeName = escapeHtml(shortName);
+    const safeFullTitle = escapeHtml(node.assigned ? node.name : 'Waiting');
     const safeSlot = escapeHtml(node.slot);
 
-    const nodeEl = document.createElement('div');
-    nodeEl.className = 'ring-node';
-    if (node.assigned) nodeEl.classList.add('ring-node-active');
-    if (isSelf) nodeEl.classList.add('ring-node-self');
-    if (isTarget) nodeEl.classList.add('ring-node-selected');
+    const nodeEl = document.createElement('button');
+    nodeEl.type = 'button';
+    nodeEl.className = 'mesh-node';
+    if (pos.isHub) nodeEl.classList.add('mesh-node-hub');
+    if (node.assigned) nodeEl.classList.add('mesh-node-active');
+    if (isSelf) nodeEl.classList.add('mesh-node-self');
+    if (isTarget) nodeEl.classList.add('mesh-node-selected');
+    nodeEl.style.left = pos.left;
+    nodeEl.style.top = pos.top;
+
+    if (isSelf || (!node.assigned && node.slot !== 'U')) {
+      nodeEl.disabled = true;
+    }
 
     nodeEl.innerHTML = `
       ${isSelf ? '<span class="self-tag">YOU</span>' : ''}
-      <span class="ring-node-letter">[ ${safeSlot} ]</span>
-      <span class="ring-node-device" title="${safeNodeName}">${safeNodeName}</span>
+      <span class="mesh-node-head">
+        <span class="mesh-node-dot ${node.assigned ? 'online' : ''}"></span>
+        <span class="mesh-node-letter">[ ${safeSlot} ]</span>
+      </span>
+      <span class="mesh-node-device" title="${safeFullTitle}">${safeNodeName}</span>
     `;
 
-    // Only allow selecting valid targets (can't target oneself)
     if (!isSelf && node.assigned) {
       nodeEl.addEventListener('click', () => {
+        userPickedTarget = true;
         selectTarget(node.slot, `[ ${node.slot} ] ${node.name}`);
       });
     } else if (!isSelf && !node.assigned && node.slot === 'U') {
-      // Host slot fallback
       nodeEl.addEventListener('click', () => {
+        userPickedTarget = true;
         selectTarget('U', '[ U ] Master Host');
       });
     }
 
-    meshRing.appendChild(nodeEl);
+    diagram.appendChild(nodeEl);
   });
 
-  // Swarm / Broadcast Node [ ALL ]
+  meshRing.appendChild(diagram);
+
+  // Full-width Broadcast Pill below Linking Diagram
   const isSwarmTarget = (targetSlot === 'ALL');
-  const swarmEl = document.createElement('div');
-  swarmEl.className = 'ring-node ring-node-all ring-node-active' + (isSwarmTarget ? ' ring-node-selected' : '');
+  const swarmEl = document.createElement('button');
+  swarmEl.type = 'button';
+  swarmEl.className = 'mesh-all-pill' + (isSwarmTarget ? ' selected' : '');
   swarmEl.innerHTML = `
-    <span class="ring-node-letter ring-node-letter-all">[ ALL ]</span>
-    <span class="ring-node-device">Swarm All</span>
+    <span class="mesh-all-left">
+      <span class="mesh-node-letter">[ ALL ]</span>
+      <span>Broadcast to All Connected Devices</span>
+    </span>
+    <span class="mesh-all-count">${assignedPeers} peer${assignedPeers === 1 ? '' : 's'} linked</span>
   `;
   swarmEl.addEventListener('click', () => {
-    selectTarget('ALL', '[ ALL ] All Mesh Devices (Swarm Broadcast)');
+    userPickedTarget = true;
+    selectTarget('ALL', '[ ALL ] All Connected Devices');
   });
   meshRing.appendChild(swarmEl);
 }
@@ -434,9 +709,13 @@ function selectTarget(slot, label) {
 
 // 4. SSE Real-Time Event Stream
 function connectMeshEvents() {
-  const eventSource = new EventSource('/api/mesh/events');
+  if (meshEventSource) {
+    try { meshEventSource.close(); } catch {}
+  }
+  const streamUrl = `/api/mesh/events?clientId=${encodeURIComponent(myClientId || '')}`;
+  meshEventSource = new EventSource(streamUrl);
 
-  eventSource.onmessage = (e) => {
+  meshEventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'ring_update') {
@@ -468,9 +747,29 @@ function connectMeshEvents() {
     }
   };
 
-  eventSource.onerror = () => {
+  meshEventSource.onerror = () => {
     // Browser auto-reconnects SSE
   };
+}
+
+async function reconcileMeshPresence() {
+  if (!myClientId) return;
+  leaveBeaconSent = false;
+  if (!meshEventSource || meshEventSource.readyState === 2) {
+    connectMeshEvents();
+  }
+  const stillAssigned = isLocalHostPage() || currentRingState.length === 0 || currentRingState.some(n => n.assigned && n.clientId === myClientId);
+  if (!stillAssigned) {
+    await joinMesh();
+    return;
+  }
+  try {
+    await fetch('/api/mesh/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: myClientId })
+    });
+  } catch {}
 }
 
 // =========================================================
@@ -604,6 +903,35 @@ function handleHostTransferComplete(data) {
   setIslandState('state-complete');
   playSuccessChime();
 
+  const isHostViewer = isLocalHostPage();
+  const isDirectHostTarget = data.toSlot === 'U' || !data.toSlot;
+  if (isHostViewer && isDirectHostTarget) {
+    const ctx = getClientFileContext(data.fileName, data);
+    showReceiveToast({
+      title: 'File Received on PC',
+      fileName: data.fileName,
+      meta: `From [ ${data.fromSlot || 'Peer'} ] • ${formatBytes(data.fileSize)} • Saved to Downloads\\uDrop`,
+      badge: ctx.badge,
+      category: ctx.category,
+      actionLabel: 'Show',
+      actionIcon: 'folder-open',
+      onAction: () => {
+        fetch('/api/open-file', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: data.filePath, fileName: data.fileName })
+        }).then(res => {
+          if (!res.ok) {
+            return fetch('/api/open-folder', { method: 'POST', keepalive: true });
+          }
+        }).catch(() => {
+          fetch('/api/open-folder', { method: 'POST', keepalive: true }).catch(() => {});
+        });
+      }
+    });
+  }
+
   // Refresh files list in dashboard
   loadHostFiles();
 
@@ -679,14 +1007,15 @@ const openQrModalBtn = document.getElementById('openQrModalBtn');
 const closeQrModalBtn = document.getElementById('closeQrModalBtn');
 const qrModalBackdrop = document.getElementById('qrModalBackdrop');
 const glassQrCanvas = document.getElementById('glassQrCanvas');
-const glassModalPanel = document.getElementById('glassModalPanel');
-const glassThemeBtns = document.querySelectorAll('.glass-theme-btn');
 
-let activeModalTheme = 'obsidian';
 let kineticModalQr = (glassQrCanvas && typeof window.createKineticQr === 'function')
-  ? window.createKineticQr(glassQrCanvas, { theme: activeModalTheme })
+  ? window.createKineticQr(glassQrCanvas)
   : null;
 let isDismantlingModal = false;
+
+if (kineticModalQr && typeof kineticModalQr.prefetch === 'function') {
+  kineticModalQr.prefetch();
+}
 
 function openQrModal() {
   if (!qrGlassModal) return;
@@ -695,7 +1024,7 @@ function openQrModal() {
   qrGlassModal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   if (kineticModalQr) {
-    kineticModalQr.assemble({ theme: activeModalTheme });
+    kineticModalQr.assemble();
   }
 }
 
@@ -737,29 +1066,9 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Auto-open modal if requested via URL (?pair or ?qr)
-if (window.location.search.includes('pair') || window.location.search.includes('qr')) {
-  setTimeout(openQrModal, 200);
-}
-
-glassThemeBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    glassThemeBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const theme = btn.dataset.theme;
-    activeModalTheme = theme;
-    if (kineticModalQr) {
-      kineticModalQr.setTheme(theme);
-    }
-    if (glassModalPanel) {
-      glassModalPanel.className = `glass-modal-panel theme-${theme}`;
-    }
-  });
-});
-
-// Auto-open if URL contains ?qr=open or ?qr=1 or hash is #qr
-if (window.location.search.includes('qr=') || window.location.hash === '#qr') {
-  openQrModal();
+// Auto-open modal if requested via URL (?pair, ?qr) or hash #qr
+if (window.location.search.includes('pair') || window.location.search.includes('qr') || window.location.hash === '#qr') {
+  setTimeout(openQrModal, 120);
 }
 
 let activeIncomingTransfer = null;
@@ -787,13 +1096,13 @@ function handleIncomingMeshTransfer(transfer) {
         incomingThumbBox.innerHTML = `<img src="${transfer.downloadUrl}?inline=1" class="file-thumb" alt="">`;
       } else {
         incomingThumbBox.classList.add('file-thumb-badge');
-        incomingThumbBox.textContent = ctx.iconLabel;
+        incomingThumbBox.innerHTML = renderLucideSvg(getCategoryLucideName(ctx.category), 18, 1.9);
       }
     }
 
     if (incomingContextBtn) {
       if (ctx.actionLabel) {
-        incomingContextBtn.textContent = ctx.actionLabel;
+        incomingContextBtn.innerHTML = `${renderLucideSvg(getActionLucideName(ctx, ctx.actionLabel), 13, 2.2)}<span>${escapeHtml(ctx.actionLabel)}</span>`;
         incomingContextBtn.classList.remove('hidden');
       } else {
         incomingContextBtn.classList.add('hidden');
@@ -804,7 +1113,17 @@ function handleIncomingMeshTransfer(transfer) {
     incomingDownloadBtn.setAttribute('download', transfer.fileName);
     incomingTransferCard.classList.remove('hidden');
 
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    const toastActionLabel = ctx.actionLabel || 'Download';
+    showReceiveToast({
+      title: `File Received from [ ${transfer.fromSlot} ]`,
+      fileName: transfer.fileName,
+      meta: `${formatBytes(transfer.fileSize)} • ${ctx.hint}`,
+      badge: ctx.badge,
+      category: ctx.category,
+      actionLabel: toastActionLabel,
+      actionIcon: getActionLucideName(ctx, toastActionLabel),
+      onAction: () => triggerContextSaveAction(transfer.downloadUrl, transfer.fileName, transfer.fileSize, ctx, receiveToastActionBtn)
+    });
   }
 }
 
@@ -935,7 +1254,7 @@ function startVideoWakeLock() {
       canvas.width = 2;
       canvas.height = 2;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-black').trim() || 'black';
       ctx.fillRect(0, 0, 2, 2);
       if (canvas.captureStream) {
         wakeCanvasStream = canvas.captureStream(1);
@@ -1024,14 +1343,22 @@ function combineSignals(sigA, sigB) {
   return controller.signal;
 }
 
+const SMALL_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB
+
 // Bandwidth Smartness & Dynamic Allocation
-// Single-file mode: Allocates 100% of pipeline bandwidth to the single file (0 channel contention, direct full-speed stream)
-// Multi-file batch mode: Uses balanced 4MB chunks for responsive queue progression and individual resilience
-function getOptimalChunkConfig(fileSize, totalFiles = 1) {
-  if (totalFiles === 1) {
-    // Single file dedicated bandwidth allocation:
+// Files < 10MB: Sent sequentially through a single-bandwidth pipe (0 chunk fragmentation, 0 Wi-Fi contention)
+// Batches of multiple files >= 10MB: Sent in parallel concurrent streams
+function getOptimalChunkConfig(fileSize, totalFiles = 1, isParallelSlot = false) {
+  if (fileSize < SMALL_FILE_THRESHOLD_BYTES) {
+    return {
+      chunkSize: Math.max(1, fileSize),
+      concurrency: 1,
+      mode: totalFiles > 1 ? 'Single-Bandwidth Queued (<10 MB)' : 'Dedicated Full-Bandwidth Turbo Pipe'
+    };
+  }
+
+  if (totalFiles === 1 || !isParallelSlot) {
     if (fileSize <= 64 * 1024 * 1024) {
-      // Files <= 64MB (e.g. 40MB video): 1 single continuous full-speed burst chunk!
       return {
         chunkSize: Math.max(1, fileSize),
         concurrency: 1,
@@ -1039,14 +1366,12 @@ function getOptimalChunkConfig(fileSize, totalFiles = 1) {
       };
     }
     if (fileSize <= 256 * 1024 * 1024) {
-      // 64MB - 256MB: 32MB chunks for maximum socket throughput without fragmentation
       return {
         chunkSize: 32 * 1024 * 1024,
         concurrency: 1,
         mode: 'High-Bandwidth Dedicated Pipe'
       };
     }
-    // Very large 4K single videos (> 256MB): 16MB chunks with dual-pipeline saturation
     return {
       chunkSize: 16 * 1024 * 1024,
       concurrency: 2,
@@ -1054,23 +1379,16 @@ function getOptimalChunkConfig(fileSize, totalFiles = 1) {
     };
   }
 
-  // Multi-File Batch Mode (totalFiles > 1):
-  if (fileSize > 350 * 1024 * 1024) {
-    return {
-      chunkSize: 8 * 1024 * 1024,
-      concurrency: 2,
-      mode: 'Multi-Item Batch Pipeline'
-    };
-  }
+  // Multiple files >= 10MB running in parallel
   return {
-    chunkSize: 4 * 1024 * 1024,
-    concurrency: 2,
-    mode: 'Multi-Item Batch Pipeline'
+    chunkSize: fileSize > 256 * 1024 * 1024 ? 8 * 1024 * 1024 : 4 * 1024 * 1024,
+    concurrency: 1,
+    mode: 'Parallel Multi-Stream Pipeline'
   };
 }
 
-function getOptimalChunkSize(fileSize, totalFiles = 1) {
-  return getOptimalChunkConfig(fileSize, totalFiles).chunkSize;
+function getOptimalChunkSize(fileSize, totalFiles = 1, isParallelSlot = false) {
+  return getOptimalChunkConfig(fileSize, totalFiles, isParallelSlot).chunkSize;
 }
 
 /**
@@ -1173,16 +1491,14 @@ if (cancelTransferBtn) {
   cancelTransferBtn.addEventListener('click', async () => {
     isCurrentTransferCancelled = true;
     isProcessingQueue = false;
-    const fileIdToCancel = currentUploadFileId;
+    const idsToCancel = Array.from(activeUploadSessions.keys());
 
-    if (currentUploadAbortController) {
+    for (const ctrl of activeUploadSessions.values()) {
       try {
-        currentUploadAbortController.abort();
+        ctrl.abort();
       } catch (e) {}
     }
-
-    currentUploadAbortController = null;
-    currentUploadFileId = null;
+    activeUploadSessions.clear();
 
     // Immediately purge queue and state so re-transfers start completely fresh
     activeBatchQueue = [];
@@ -1194,15 +1510,15 @@ if (cancelTransferBtn) {
     releaseScreenWakeLock();
 
     transferStatus.textContent = 'Transfer cancelled.';
-    transferStatus.style.color = '#F87171';
+    transferStatus.style.color = 'var(--status-red)';
     transferSpeed.textContent = 'Cancelled';
     transferEta.textContent = '--:--';
     cancelTransferBtn.style.display = 'none';
 
-    if (fileIdToCancel) {
-      try {
-        await fetch(`/api/upload/cancel/${fileIdToCancel}`, { method: 'POST' });
-      } catch (e) {}
+    if (idsToCancel.length > 0) {
+      await Promise.allSettled(
+        idsToCancel.map(id => fetch(`/api/upload/cancel/${encodeURIComponent(id)}`, { method: 'POST' }))
+      );
     }
 
     if (dropzone) {
@@ -1321,6 +1637,92 @@ function updateBatchProgress() {
   batchProgressStats.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(totalBytes)} (${pct}%)`;
 }
 
+let aggregateSample = { bytes: 0, time: Date.now(), lastSpeedMb: '' };
+
+function refreshAggregateProgressUI(force = false) {
+  const uploadingItems = activeBatchQueue.filter(i => i.status === 'uploading');
+  if (uploadingItems.length <= 1) return;
+
+  const now = Date.now();
+  const totalBytes = activeBatchQueue.reduce((acc, i) => acc + i.size, 0);
+  const uploadedBytes = activeBatchQueue.reduce((acc, i) => acc + (i.uploadedBytes || 0), 0);
+  const pct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 100;
+
+  if (!force && (now - aggregateSample.time < 180)) {
+    progressBar.style.width = `${pct}%`;
+    return;
+  }
+
+  const dt = (now - aggregateSample.time) / 1000;
+  if (dt >= 0.45) {
+    const delta = Math.max(0, uploadedBytes - aggregateSample.bytes);
+    const speedBps = delta / dt;
+    aggregateSample.lastSpeedMb = `${(speedBps / (1024 * 1024)).toFixed(1)} MB/s`;
+    aggregateSample.bytes = uploadedBytes;
+    aggregateSample.time = now;
+
+    const remaining = Math.max(0, totalBytes - uploadedBytes);
+    const etaSec = speedBps > 0 ? Math.ceil(remaining / speedBps) : 0;
+    const etaMin = Math.floor(etaSec / 60);
+    const etaRem = etaSec % 60;
+    transferEta.textContent = `${etaMin}:${etaRem < 10 ? '0' : ''}${etaRem}`;
+  }
+
+  transferFileName.textContent = `Parallel Streaming (${uploadingItems.length} files active)`;
+  transferStats.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(totalBytes)}`;
+  if (aggregateSample.lastSpeedMb) transferSpeed.textContent = aggregateSample.lastSpeedMb;
+  progressBar.style.width = `${pct}%`;
+  transferChunks.textContent = `Parallel Mode (>=10 MB) • ${uploadingItems.length} Concurrent Streams`;
+  transferStatus.textContent = `Streaming ${uploadingItems.length} files simultaneously across LAN...`;
+}
+
+async function runQueueItemWithRetry(item, totalFiles, isParallelSlot) {
+  if (isCurrentTransferCancelled || item.status === 'done') return item.status === 'done';
+
+  item.status = 'uploading';
+  renderQueueList();
+
+  const pill = document.getElementById(`queuePill_${item.id}`);
+  if (pill && pill.parentElement) {
+    pill.parentElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  let ok = false;
+  for (let attempt = 1; attempt <= 2 && !ok && !isCurrentTransferCancelled; attempt++) {
+    if (attempt > 1) {
+      if (!isParallelSlot) {
+        transferStatus.textContent = `Retrying item ${item.id + 1} of ${totalFiles} (Attempt ${attempt}/2)... transfer will resume.`;
+      }
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    ok = await uploadFileChunked(item.file, item.id + 1, totalFiles, (bytes, size, pct) => {
+      item.uploadedBytes = bytes;
+      item.progress = pct;
+      updateBatchProgress();
+      const activePill = document.getElementById(`queuePill_${item.id}`);
+      if (activePill) activePill.textContent = `${pct}%`;
+      if (isParallelSlot) {
+        refreshAggregateProgressUI(false);
+      }
+    }, isParallelSlot);
+  }
+
+  if (isCurrentTransferCancelled) return false;
+
+  if (ok) {
+    item.status = 'done';
+    item.progress = 100;
+    item.uploadedBytes = item.size;
+  } else {
+    item.status = 'failed';
+  }
+
+  renderQueueList();
+  updateBatchProgress();
+  return ok;
+}
+
 async function processBatchQueue() {
   renderQueueList();
   transferContainer.classList.remove('hidden');
@@ -1332,62 +1734,53 @@ async function processBatchQueue() {
   }
 
   updateBatchProgress();
+  aggregateSample = { bytes: 0, time: Date.now(), lastSpeedMb: '' };
 
   let successCount = 0;
   let failedCount = 0;
 
-  for (let idx = 0; idx < activeBatchQueue.length; idx++) {
-    if (isCurrentTransferCancelled) break;
-    const item = activeBatchQueue[idx];
-    if (item.status === 'done') {
-      successCount++;
+  while (!isCurrentTransferCancelled) {
+    const waiting = activeBatchQueue.filter(i => i.status === 'waiting');
+    if (waiting.length === 0) break;
+
+    const smallWaiting = waiting.filter(i => i.size < SMALL_FILE_THRESHOLD_BYTES);
+    const largeWaiting = waiting.filter(i => i.size >= SMALL_FILE_THRESHOLD_BYTES);
+
+    // 1. Small files (< 10MB): run strictly sequentially on single-bandwidth queue
+    if (smallWaiting.length > 0) {
+      const nextSmall = smallWaiting[0];
+      const ok = await runQueueItemWithRetry(nextSmall, activeBatchQueue.length, false);
+      if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
+      await new Promise(r => setTimeout(r, 80));
       continue;
     }
 
-    item.status = 'uploading';
-    renderQueueList();
-
-    // Auto-scroll active item into view
-    const pill = document.getElementById(`queuePill_${item.id}`);
-    if (pill && pill.parentElement) {
-      pill.parentElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // 2. Large files (>= 10MB): run in parallel when 2+ large items exist, or full single pipe when only 1
+    if (largeWaiting.length === 1) {
+      const ok = await runQueueItemWithRetry(largeWaiting[0], activeBatchQueue.length, false);
+      if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
+      await new Promise(r => setTimeout(r, 80));
+      continue;
     }
 
-    // Try uploading with up to 2 file-level retries
-    let ok = false;
-    for (let attempt = 1; attempt <= 2 && !ok && !isCurrentTransferCancelled; attempt++) {
-      if (attempt > 1) {
-        transferStatus.textContent = `Retrying item ${idx + 1} of ${totalFiles} (Attempt ${attempt}/2)... transfer will resume.`;
-        await new Promise(r => setTimeout(r, 1200));
+    const hasUltraLarge = largeWaiting.some(i => i.size > 256 * 1024 * 1024);
+    const parallelSlots = Math.min(hasUltraLarge ? 2 : 3, largeWaiting.length);
+
+    async function parallelWorker() {
+      while (!isCurrentTransferCancelled) {
+        const nextLarge = activeBatchQueue.find(i => i.status === 'waiting' && i.size >= SMALL_FILE_THRESHOLD_BYTES);
+        if (!nextLarge) break;
+        const ok = await runQueueItemWithRetry(nextLarge, activeBatchQueue.length, true);
+        if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
+        await new Promise(r => setTimeout(r, 80));
       }
-
-      ok = await uploadFileChunked(item.file, idx + 1, totalFiles, (bytes, size, pct) => {
-        item.uploadedBytes = bytes;
-        item.progress = pct;
-        updateBatchProgress();
-        const activePill = document.getElementById(`queuePill_${item.id}`);
-        if (activePill) activePill.textContent = `${pct}%`;
-      });
     }
 
-    if (isCurrentTransferCancelled) break;
-
-    if (ok) {
-      item.status = 'done';
-      item.progress = 100;
-      item.uploadedBytes = item.size;
-      successCount++;
-    } else {
-      item.status = 'failed';
-      failedCount++;
-    }
-
-    renderQueueList();
-    updateBatchProgress();
-
-    // Micro-pause (120ms) to allow mobile garbage collection to sweep memory
-    await new Promise(r => setTimeout(r, 120));
+    await Promise.all(Array.from({ length: parallelSlots }, () => parallelWorker()));
   }
+
+  successCount = activeBatchQueue.filter(i => i.status === 'done').length;
+  failedCount = activeBatchQueue.filter(i => i.status === 'failed').length;
 
   isProcessingQueue = false;
   releaseScreenWakeLock();
@@ -1403,15 +1796,15 @@ async function processBatchQueue() {
   if (!isCurrentTransferCancelled) {
     if (failedCount > 0) {
       transferStatus.textContent = `Queue completed: ${successCount} sent, ${failedCount} failed.`;
-      transferStatus.style.color = '#F87171';
+      transferStatus.style.color = 'var(--status-red)';
       if (retryFailedBtn) {
         retryFailedBtn.classList.remove('hidden');
         const text = document.getElementById('retryFailedBtnText');
         if (text) text.textContent = `Retry ${failedCount} Failed`;
       }
     } else {
-      transferStatus.textContent = `All ${totalFiles} file${totalFiles > 1 ? 's' : ''} transferred successfully.`;
-      transferStatus.style.color = '#22C55E';
+      transferStatus.textContent = `All ${activeBatchQueue.length} file${activeBatchQueue.length > 1 ? 's' : ''} transferred successfully.`;
+      transferStatus.style.color = 'var(--status-green)';
       if (retryFailedBtn) retryFailedBtn.classList.add('hidden');
 
       setTimeout(() => {
@@ -1448,255 +1841,263 @@ if (retryFailedBtn) {
 /**
  * Uploads a large file using tuned sparse chunk streaming & auto-resume.
  */
-async function uploadFileChunked(file, queueIndex = 1, totalFiles = 1, onProgress = null) {
+async function uploadFileChunked(file, queueIndex = 1, totalFiles = 1, onProgress = null, isParallelSlot = false) {
   if (isCurrentTransferCancelled) return false;
 
-  const config = getOptimalChunkConfig(file.size, totalFiles);
+  const config = getOptimalChunkConfig(file.size, totalFiles, isParallelSlot);
   const chunkSize = config.chunkSize;
   const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
   const randTag = Math.random().toString(36).substring(2, 7);
   const cleanBase = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._\- ()]/g, '_');
   const fileId = `${cleanBase}_${file.size}_${file.lastModified || Date.now()}_${randTag}`.replace(/[^a-zA-Z0-9_]/g, '_');
 
-  currentUploadAbortController = new AbortController();
-  currentUploadFileId = fileId;
+  const abortController = new AbortController();
+  activeUploadSessions.set(fileId, abortController);
+  const ownsMainPanel = () => activeUploadSessions.size <= 1;
 
-  transferContainer.classList.remove('hidden');
-  if (cancelTransferBtn) cancelTransferBtn.style.display = '';
-  transferFileName.textContent = totalFiles > 1 ? `[${queueIndex}/${totalFiles}] ${file.name || cleanBase}` : (file.name || cleanBase);
-  transferStats.textContent = `0 B / ${formatBytes(file.size)}`;
-  transferSpeed.textContent = 'Connecting...';
-  transferEta.textContent = '--:--';
-  progressBar.style.width = '0%';
-  transferChunks.textContent = totalFiles > 1 
-    ? `Queue ${queueIndex}/${totalFiles} • Chunk 0/${totalChunks}` 
-    : (totalChunks === 1 ? 'Dedicated 100% Bandwidth Pipe' : `Dedicated Stream • Chunk 0/${totalChunks}`);
-
-  transferStatus.textContent = totalFiles > 1 
-    ? `Preparing item ${queueIndex} of ${totalFiles}...` 
-    : (totalChunks === 1 ? 'Allocating 100% bandwidth to single file...' : 'Initializing dedicated stream...');
-
-  // Step 1: Initialize sparse session on host with 25s timeout
-  let initRes;
   try {
-    const initCtrl = new AbortController();
-    const initTimer = setTimeout(() => initCtrl.abort(), 25000);
-    const combinedSignal = combineSignals(currentUploadAbortController.signal, initCtrl.signal);
+    transferContainer.classList.remove('hidden');
+    if (cancelTransferBtn) cancelTransferBtn.style.display = '';
 
-    initRes = await fetch('/api/upload/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: combinedSignal,
-      body: JSON.stringify({
-        fileId,
-        fileName: file.name || cleanBase,
-        fileSize: file.size,
-        totalChunks,
-        chunkSize,
-        fromSlot: mySlot || 'Node',
-        queueIndex,
-        totalFiles
-      })
-    });
-    clearTimeout(initTimer);
-  } catch (e) {
-    if (isCurrentTransferCancelled) return false;
-  }
-
-  if (!initRes || !initRes.ok) {
-    if (isCurrentTransferCancelled) return false;
-    transferStatus.textContent = 'Failed to initialize session.';
-    return false;
-  }
-
-  // Step 2: Check existing status (auto-resume)
-  let receivedSet = new Set();
-  try {
-    const statusRes = await fetch(`/api/upload/status/${fileId}`, {
-      signal: currentUploadAbortController.signal
-    });
-    if (statusRes.ok) {
-      const statusData = await statusRes.json();
-      receivedSet = new Set(statusData.receivedChunks);
-    }
-  } catch (e) {}
-
-  let completedBytes = 0;
-  receivedSet.forEach((idx) => {
-    const cStart = idx * chunkSize;
-    const cEnd = Math.min(file.size, cStart + chunkSize);
-    completedBytes += (cEnd - cStart);
-  });
-
-  const inFlightBytes = new Map();
-  let startTime = Date.now();
-  let lastBytes = completedBytes;
-  let lastUiUpdate = 0;
-
-  function updateProgressUI(force = false) {
-    let activeTotal = 0;
-    inFlightBytes.forEach((val) => { activeTotal += val; });
-    const bytesUploaded = Math.min(file.size, completedBytes + activeTotal);
-
-    const now = Date.now();
-    if (!force && (now - lastUiUpdate < 120)) return;
-    lastUiUpdate = now;
-
-    const elapsedSec = (now - startTime) / 1000;
-    if (elapsedSec >= 0.45) {
-      const deltaBytes = bytesUploaded - lastBytes;
-      if (deltaBytes >= 0) {
-        const speedBps = deltaBytes / elapsedSec;
-        transferSpeed.textContent = `${(speedBps / (1024 * 1024)).toFixed(1)} MB/s`;
-
-        const remainingBytes = Math.max(0, file.size - bytesUploaded);
-        const etaSec = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
-        const etaMin = Math.floor(etaSec / 60);
-        const etaRemSec = etaSec % 60;
-        transferEta.textContent = `${etaMin}:${etaRemSec < 10 ? '0' : ''}${etaRemSec}`;
-      }
-      lastBytes = bytesUploaded;
-      startTime = now;
+    if (ownsMainPanel()) {
+      transferFileName.textContent = totalFiles > 1 ? `[${queueIndex}/${totalFiles}] ${file.name || cleanBase}` : (file.name || cleanBase);
+      transferStats.textContent = `0 B / ${formatBytes(file.size)}`;
+      transferSpeed.textContent = 'Connecting...';
+      transferEta.textContent = '--:--';
+      progressBar.style.width = '0%';
+      transferChunks.textContent = totalFiles > 1
+        ? `${config.mode} • Item ${queueIndex}/${totalFiles}`
+        : (totalChunks === 1 ? 'Dedicated 100% Bandwidth Pipe' : `Dedicated Stream • Chunk 0/${totalChunks}`);
+      transferStatus.textContent = totalFiles > 1
+        ? `Preparing item ${queueIndex} of ${totalFiles} (${config.mode})...`
+        : (totalChunks === 1 ? 'Allocating 100% bandwidth to single file...' : 'Initializing dedicated stream...');
     }
 
-    const percent = file.size > 0 ? Math.min(100, Math.round((bytesUploaded / file.size) * 100)) : 100;
-    progressBar.style.width = `${percent}%`;
-    transferStats.textContent = `${formatBytes(bytesUploaded)} / ${formatBytes(file.size)}`;
-    transferChunks.textContent = totalFiles > 1
-      ? `Queue ${queueIndex}/${totalFiles} • Chunk ${receivedSet.size}/${totalChunks}`
-      : (totalChunks === 1 ? '100% Dedicated Bandwidth' : `Dedicated Stream • Chunk ${receivedSet.size}/${totalChunks}`);
+    // Step 1: Initialize sparse session on host with 25s timeout
+    let initRes;
+    try {
+      const initCtrl = new AbortController();
+      const initTimer = setTimeout(() => initCtrl.abort(), 25000);
+      const combinedSignal = combineSignals(abortController.signal, initCtrl.signal);
 
-    transferStatus.textContent = totalFiles > 1
-      ? `Streaming item ${queueIndex}/${totalFiles} (${formatBytes(chunkSize)} chunks)... active`
-      : (totalChunks === 1
-          ? `Streaming single file at full bandwidth (dedicated pipe)...`
-          : `Streaming dedicated pipe (${CONCURRENCY} channel${CONCURRENCY > 1 ? 's' : ''} active)...`);
-
-    if (onProgress) {
-      onProgress(bytesUploaded, file.size, percent);
+      recentlyUploadedNames.set(file.name || cleanBase, Date.now());
+      initRes = await fetch('/api/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: combinedSignal,
+        body: JSON.stringify({
+          fileId,
+          fileName: file.name || cleanBase,
+          fileSize: file.size,
+          totalChunks,
+          chunkSize,
+          fromSlot: mySlot || 'Node',
+          queueIndex,
+          totalFiles
+        })
+      });
+      clearTimeout(initTimer);
+    } catch (e) {
+      if (isCurrentTransferCancelled) return false;
     }
-  }
 
-  // Step 3: Populate work queue with missing chunks
-  const chunkQueue = [];
-  for (let i = 0; i < totalChunks; i++) {
-    if (!receivedSet.has(i)) {
-      chunkQueue.push(i);
-    }
-  }
-
-  if (mascotFace) mascotFace.textContent = '{- U -}';
-
-  const CONCURRENCY = Math.min(config.concurrency, Math.max(1, chunkQueue.length));
-  let hasFailed = false;
-
-  async function worker() {
-    while (chunkQueue.length > 0 && !hasFailed && !isCurrentTransferCancelled) {
-      const i = chunkQueue.shift();
-      const start = i * chunkSize;
-      const end = Math.min(file.size, start + chunkSize);
-      const chunkLen = end - start;
-      const chunkBlob = file.slice(start, end);
-
-      let success = false;
-      let retries = 0;
-
-      while (!success && retries < 5 && !hasFailed && !isCurrentTransferCancelled) {
-        try {
-          inFlightBytes.set(i, 0);
-          await uploadChunkViaXHR(
-            `/api/upload/chunk/${fileId}/${i}`,
-            chunkBlob,
-            currentUploadAbortController ? currentUploadAbortController.signal : undefined,
-            (loaded) => {
-              inFlightBytes.set(i, Math.min(chunkLen, loaded));
-              updateProgressUI(false);
-            }
-          );
-
-          inFlightBytes.delete(i);
-          if (!receivedSet.has(i)) {
-            receivedSet.add(i);
-            completedBytes = Math.min(file.size, completedBytes + chunkLen);
-          }
-          success = true;
-          updateProgressUI(true);
-        } catch (err) {
-          inFlightBytes.delete(i);
-          if (isCurrentTransferCancelled || err.name === 'AbortError' || currentUploadAbortController?.signal?.aborted) {
-            hasFailed = true;
-            return;
-          }
-          retries++;
-          transferStatus.textContent = `Retrying chunk ${i + 1} (Attempt ${retries}/5)...`;
-          await new Promise(r => setTimeout(r, 400 * retries));
-        }
-      }
-
-      if (!success) {
-        hasFailed = true;
-        if (!isCurrentTransferCancelled) {
-          transferStatus.textContent = `Interrupted on chunk ${i + 1}. Auto-resuming...`;
-        }
-        return;
-      }
-    }
-  }
-
-  const workers = Array.from({ length: CONCURRENCY }, () => worker());
-  await Promise.all(workers);
-
-  if (hasFailed || isCurrentTransferCancelled) {
-    currentUploadAbortController = null;
-    currentUploadFileId = null;
-    return false;
-  }
-
-  // Step 4: Finalize file on host + Mesh routing
-  transferStatus.textContent = totalFiles > 1 ? `Finalizing item ${queueIndex} of ${totalFiles}...` : 'Finalizing transfer & routing...';
-  try {
-    const finalRes = await fetch(`/api/upload/complete/${fileId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: currentUploadAbortController ? currentUploadAbortController.signal : undefined,
-      body: JSON.stringify({
-        fromSlot: mySlot || 'Node',
-        toSlot: targetSlot,
-        queueIndex,
-        totalFiles
-      })
-    });
-
-    if (finalRes.ok) {
-      if (mascotFace) mascotFace.textContent = '{- ^ -}';
-      progressBar.style.width = '100%';
-      transferSpeed.textContent = 'Done!';
-      transferEta.textContent = '0:00';
-
-      if (targetSlot === 'U') {
-        transferStatus.textContent = totalFiles > 1 ? `Transferred item ${queueIndex} of ${totalFiles}.` : 'Transferred to Host Downloads/uDrop.';
-      } else if (targetSlot === 'ALL') {
-        transferStatus.textContent = 'Broadcasted to All Devices in UXIOM Mesh.';
-      } else {
-        transferStatus.textContent = `Beamed to Node [ ${targetSlot} ] via Host Bridge.`;
-      }
-      transferStatus.style.color = '#22C55E';
-
-      currentUploadAbortController = null;
-      currentUploadFileId = null;
-      return true;
-    } else {
-      transferStatus.textContent = 'Error during finalization.';
-      currentUploadAbortController = null;
-      currentUploadFileId = null;
+    if (!initRes || !initRes.ok) {
+      if (isCurrentTransferCancelled) return false;
+      if (ownsMainPanel()) transferStatus.textContent = 'Failed to initialize session.';
       return false;
     }
-  } catch (err) {
-    if (isCurrentTransferCancelled) return false;
-    transferStatus.textContent = 'Host failed to finalize file.';
-    currentUploadAbortController = null;
-    currentUploadFileId = null;
-    return false;
+
+    // Step 2: Check existing status (auto-resume)
+    let receivedSet = new Set();
+    try {
+      const statusRes = await fetch(`/api/upload/status/${fileId}`, {
+        signal: abortController.signal
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        receivedSet = new Set(statusData.receivedChunks);
+      }
+    } catch (e) {}
+
+    let completedBytes = 0;
+    receivedSet.forEach((idx) => {
+      const cStart = idx * chunkSize;
+      const cEnd = Math.min(file.size, cStart + chunkSize);
+      completedBytes += (cEnd - cStart);
+    });
+
+    const inFlightBytes = new Map();
+    let startTime = Date.now();
+    let lastBytes = completedBytes;
+    let lastUiUpdate = 0;
+
+    function updateProgressUI(force = false) {
+      let activeTotal = 0;
+      inFlightBytes.forEach((val) => { activeTotal += val; });
+      const bytesUploaded = Math.min(file.size, completedBytes + activeTotal);
+
+      const now = Date.now();
+      if (!force && (now - lastUiUpdate < 120)) return;
+      lastUiUpdate = now;
+
+      const percent = file.size > 0 ? Math.min(100, Math.round((bytesUploaded / file.size) * 100)) : 100;
+
+      if (ownsMainPanel()) {
+        const elapsedSec = (now - startTime) / 1000;
+        if (elapsedSec >= 0.45) {
+          const deltaBytes = bytesUploaded - lastBytes;
+          if (deltaBytes >= 0) {
+            const speedBps = deltaBytes / elapsedSec;
+            transferSpeed.textContent = `${(speedBps / (1024 * 1024)).toFixed(1)} MB/s`;
+
+            const remainingBytes = Math.max(0, file.size - bytesUploaded);
+            const etaSec = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
+            const etaMin = Math.floor(etaSec / 60);
+            const etaRemSec = etaSec % 60;
+            transferEta.textContent = `${etaMin}:${etaRemSec < 10 ? '0' : ''}${etaRemSec}`;
+          }
+          lastBytes = bytesUploaded;
+          startTime = now;
+        }
+
+        progressBar.style.width = `${percent}%`;
+        transferStats.textContent = `${formatBytes(bytesUploaded)} / ${formatBytes(file.size)}`;
+        transferChunks.textContent = totalFiles > 1
+          ? `${config.mode} • Item ${queueIndex}/${totalFiles}`
+          : (totalChunks === 1 ? '100% Dedicated Bandwidth' : `Dedicated Stream • Chunk ${receivedSet.size}/${totalChunks}`);
+
+        transferStatus.textContent = totalFiles > 1
+          ? `Streaming item ${queueIndex}/${totalFiles} (${config.mode})... active`
+          : (totalChunks === 1
+              ? `Streaming single file at full bandwidth (dedicated pipe)...`
+              : `Streaming dedicated pipe (${CONCURRENCY} channel${CONCURRENCY > 1 ? 's' : ''} active)...`);
+      }
+
+      if (onProgress) {
+        onProgress(bytesUploaded, file.size, percent);
+      }
+    }
+
+    // Step 3: Populate work queue with missing chunks
+    const chunkQueue = [];
+    for (let i = 0; i < totalChunks; i++) {
+      if (!receivedSet.has(i)) {
+        chunkQueue.push(i);
+      }
+    }
+
+    if (mascotFace) mascotFace.textContent = '{- U -}';
+
+    const CONCURRENCY = Math.min(config.concurrency, Math.max(1, chunkQueue.length));
+    let hasFailed = false;
+
+    async function worker() {
+      while (chunkQueue.length > 0 && !hasFailed && !isCurrentTransferCancelled) {
+        const i = chunkQueue.shift();
+        const start = i * chunkSize;
+        const end = Math.min(file.size, start + chunkSize);
+        const chunkLen = end - start;
+        const chunkBlob = file.slice(start, end);
+
+        let success = false;
+        let retries = 0;
+
+        while (!success && retries < 5 && !hasFailed && !isCurrentTransferCancelled) {
+          try {
+            inFlightBytes.set(i, 0);
+            await uploadChunkViaXHR(
+              `/api/upload/chunk/${fileId}/${i}`,
+              chunkBlob,
+              abortController.signal,
+              (loaded) => {
+                inFlightBytes.set(i, Math.min(chunkLen, loaded));
+                updateProgressUI(false);
+              }
+            );
+
+            inFlightBytes.delete(i);
+            if (!receivedSet.has(i)) {
+              receivedSet.add(i);
+              completedBytes = Math.min(file.size, completedBytes + chunkLen);
+            }
+            success = true;
+            updateProgressUI(true);
+          } catch (err) {
+            inFlightBytes.delete(i);
+            if (isCurrentTransferCancelled || err.name === 'AbortError' || abortController.signal.aborted) {
+              hasFailed = true;
+              return;
+            }
+            retries++;
+            if (ownsMainPanel()) {
+              transferStatus.textContent = `Retrying chunk ${i + 1} (Attempt ${retries}/5)...`;
+            }
+            await new Promise(r => setTimeout(r, 400 * retries));
+          }
+        }
+
+        if (!success) {
+          hasFailed = true;
+          if (!isCurrentTransferCancelled && ownsMainPanel()) {
+            transferStatus.textContent = `Interrupted on chunk ${i + 1}. Auto-resuming...`;
+          }
+          return;
+        }
+      }
+    }
+
+    const workers = Array.from({ length: CONCURRENCY }, () => worker());
+    await Promise.all(workers);
+
+    if (hasFailed || isCurrentTransferCancelled) {
+      return false;
+    }
+
+    // Step 4: Finalize file on host + Mesh routing
+    if (ownsMainPanel()) {
+      transferStatus.textContent = totalFiles > 1 ? `Finalizing item ${queueIndex} of ${totalFiles}...` : 'Finalizing transfer & routing...';
+    }
+    try {
+      const finalRes = await fetch(`/api/upload/complete/${fileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          fromSlot: mySlot || 'Node',
+          toSlot: targetSlot,
+          queueIndex,
+          totalFiles
+        })
+      });
+
+      if (finalRes.ok) {
+        if (ownsMainPanel()) {
+          if (mascotFace) mascotFace.textContent = '{- ^ -}';
+          progressBar.style.width = '100%';
+          transferSpeed.textContent = 'Done!';
+          transferEta.textContent = '0:00';
+
+          if (targetSlot === 'U') {
+            transferStatus.textContent = totalFiles > 1 ? `Transferred item ${queueIndex} of ${totalFiles}.` : 'Transferred to Host Downloads/uDrop.';
+          } else if (targetSlot === 'ALL') {
+            transferStatus.textContent = 'Broadcasted to All Connected Devices.';
+          } else {
+            transferStatus.textContent = `Beamed to Node [ ${targetSlot} ] via Host Bridge.`;
+          }
+          transferStatus.style.color = 'var(--status-green)';
+        }
+        return true;
+      } else {
+        if (ownsMainPanel()) transferStatus.textContent = 'Error during finalization.';
+        return false;
+      }
+    } catch (err) {
+      if (isCurrentTransferCancelled) return false;
+      if (ownsMainPanel()) transferStatus.textContent = 'Host failed to finalize file.';
+      return false;
+    }
+  } finally {
+    activeUploadSessions.delete(fileId);
   }
 }
 
@@ -1709,23 +2110,36 @@ connectMeshEvents();
 setInterval(checkHostConnection, 6000);
 setInterval(loadHostFiles, 8000);
 
-// Keep-alive heartbeat every 15s
-setInterval(async () => {
-  if (myClientId) {
-    try {
-      await fetch('/api/mesh/heartbeat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: myClientId })
-      });
-    } catch (e) {}
-  }
-}, 15000);
+// Keep-alive heartbeat every 6s so inactive tabs timeout promptly without lag
+setInterval(() => {
+  if (document.visibilityState === 'hidden') return;
+  reconcileMeshPresence();
+}, 6000);
 
-// Notify mesh when tab/browser closes to free slot immediately
-window.addEventListener('beforeunload', () => {
-  if (myClientId && navigator.sendBeacon) {
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    reconcileMeshPresence();
+    loadHostFiles();
+  }
+});
+
+window.addEventListener('focus', () => {
+  reconcileMeshPresence();
+});
+
+// Notify mesh when tab/browser closes or hides persistently to free slot immediately
+function sendMeshLeaveBeacon() {
+  if (leaveBeaconSent || !myClientId || isLocalHostPage()) return;
+  leaveBeaconSent = true;
+  if (navigator.sendBeacon) {
     const payload = new Blob([JSON.stringify({ clientId: myClientId })], { type: 'application/json' });
     navigator.sendBeacon('/api/mesh/leave', payload);
   }
+}
+
+window.addEventListener('pagehide', (e) => {
+  if (!e || !e.persisted) {
+    sendMeshLeaveBeacon();
+  }
 });
+window.addEventListener('beforeunload', sendMeshLeaveBeacon);

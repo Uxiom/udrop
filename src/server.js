@@ -1,4 +1,5 @@
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -205,31 +206,103 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
         return;
       }
 
-      // Helper: Launch Windows Explorer or OS file manager cleanly without inheriting Node pipes
+      // Helper: Launch Windows Explorer or OS file manager and bring it to foreground
       const openInExplorer = (target, isSelect = false) => {
         if (process.env.CI === 'true' || process.env.UDROP_NO_GUI === '1') {
           return;
         }
         try {
-          let child;
           if (process.platform === 'win32') {
-            const winDir = process.env.WINDIR || 'C:\\Windows';
-            const explorerPath = fs.existsSync(path.join(winDir, 'explorer.exe'))
-              ? path.join(winDir, 'explorer.exe')
-              : 'explorer.exe';
-            if (isSelect) {
-              child = spawn(explorerPath, [`/select,"${target}"`], {
-                detached: true,
-                stdio: 'ignore',
-                windowsVerbatimArguments: true
+            const fallbackWindowsReveal = () => {
+              try {
+                const normalizedTarget = path.resolve(target);
+                const targetDir = isSelect ? path.dirname(normalizedTarget) : normalizedTarget;
+                const selectLiteral = normalizedTarget.replace(/'/g, "''");
+                const dirLiteral = targetDir.replace(/'/g, "''");
+                const psScript = [
+                  `$t = '${selectLiteral}'`,
+                  `$d = '${dirLiteral}'`,
+                  `$useSelect = ${isSelect ? '$true' : '$false'}`,
+                  `$leaf = Split-Path -Leaf $d`,
+                  `$sig = '[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr h, bool f);'`,
+                  `$w = Add-Type -MemberDefinition $sig -Name 'UdropWinFocus' -Namespace 'Win32' -PassThru -ErrorAction SilentlyContinue`,
+                  `$pre = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { $_.MainWindowHandle.ToInt64() })`,
+                  `if ($useSelect -and (Test-Path -LiteralPath $t) -and -not $t.Contains(',')) {`,
+                  `  Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"' + $t + '"')`,
+                  `} elseif (Test-Path -LiteralPath $d) {`,
+                  `  Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $d + '"')`,
+                  `} else {`,
+                  `  Start-Process -FilePath 'explorer.exe'`,
+                  `}`,
+                  `$ws = New-Object -ComObject WScript.Shell`,
+                  `for ($i = 0; $i -lt 16; $i++) {`,
+                  `  Start-Sleep -Milliseconds 110`,
+                  `  $procs = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $leaf -and $_.MainWindowTitle -like ('*' + $leaf + '*') })`,
+                  `  $target = $procs | Where-Object { $pre -notcontains $_.MainWindowHandle.ToInt64() } | Select-Object -First 1`,
+                  `  if (-not $target -and $i -ge 5) { $target = $procs | Select-Object -First 1 }`,
+                  `  if ($target) {`,
+                  `    $h = $target.MainWindowHandle`,
+                  `    if ($w) { $w::ShowWindow($h, $(if ($w::IsIconic($h)) { 9 } else { 5 })); $w::SetWindowPos($h, [IntPtr](-1), 0,0,0,0, 0x0043); $w::SetWindowPos($h, [IntPtr](-2), 0,0,0,0, 0x0043); $w::SwitchToThisWindow($h, $true); $w::SetForegroundWindow($h) }`,
+                  `    elseif ($leaf) { [void]$ws.AppActivate($leaf) }`,
+                  `    break`,
+                  `  }`,
+                  `}`
+                ].join('; ');
+                const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+                const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded], {
+                  detached: true,
+                  stdio: 'ignore',
+                  windowsHide: true
+                });
+                ps.on('error', () => {
+                  const winDir = process.env.WINDIR || 'C:\\Windows';
+                  const explorerPath = fs.existsSync(path.join(winDir, 'explorer.exe'))
+                    ? path.join(winDir, 'explorer.exe')
+                    : 'explorer.exe';
+                  const fallbackChild = spawn(
+                    explorerPath,
+                    isSelect && !normalizedTarget.includes(',') ? [`/select,"${normalizedTarget}"`] : [targetDir],
+                    { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }
+                  );
+                  fallbackChild.unref();
+                });
+                ps.unref();
+              } catch {}
+            };
+
+            const userClean = (os.userInfo().username || 'user').replace(/[^a-zA-Z0-9]/g, '');
+            const pipeName = process.env.UDROP_TRAY_PIPE || `UxiomUDropTrayPipe_${userClean}`;
+            const pipePath = `\\\\.\\pipe\\${pipeName}`;
+            let handled = false;
+            try {
+              const client = net.connect(pipePath, () => {
+                if (handled) return;
+                handled = true;
+                const cmd = isSelect ? `REVEAL|${target}\n` : `OPENDIR|${target}\n`;
+                client.end(cmd);
               });
-            } else {
-              child = spawn(explorerPath, [target], {
-                detached: true,
-                stdio: 'ignore'
+              client.setTimeout(250);
+              client.on('timeout', () => {
+                client.destroy();
+                if (!handled) {
+                  handled = true;
+                  fallbackWindowsReveal();
+                }
               });
+              client.on('error', () => {
+                if (!handled) {
+                  handled = true;
+                  fallbackWindowsReveal();
+                }
+              });
+            } catch {
+              fallbackWindowsReveal();
             }
-          } else if (process.platform === 'darwin') {
+            return;
+          }
+
+          let child;
+          if (process.platform === 'darwin') {
             child = spawn('open', isSelect ? ['-R', target] : [target], {
               detached: true,
               stdio: 'ignore'
@@ -283,11 +356,22 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
               return;
             }
 
+            let resolvedTarget = downloadRoot;
+            let shouldSelect = false;
             if (fs.existsSync(candidate)) {
-              openInExplorer(candidate, candidate !== downloadRoot);
+              resolvedTarget = candidate;
+              shouldSelect = (candidate !== downloadRoot);
+            } else if (data.fileName) {
+              const byName = path.join(downloadRoot, path.basename(data.fileName));
+              if (fs.existsSync(byName)) {
+                resolvedTarget = byName;
+                shouldSelect = true;
+              }
             }
+
+            openInExplorer(resolvedTarget, shouldSelect);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, targetPath: candidate }));
+            res.end(JSON.stringify({ success: true, targetPath: resolvedTarget }));
           } catch (e) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
@@ -382,7 +466,7 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive'
         });
-        addSSEClient(res, req);
+        addSSEClient(res, req, parsedUrl.searchParams.get('clientId'));
         return;
       }
 

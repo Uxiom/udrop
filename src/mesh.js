@@ -5,6 +5,9 @@ const SLOTS = ['U', 'X', 'I', 'O', 'M'];
 const MESH_NODES = new Map();
 const SSE_CLIENTS = new Set();
 const LOCAL_SSE_CLIENTS = new Set();
+const CLIENT_SSE_SOCKETS = new Map();
+const PENDING_DISCONNECTS = new Map();
+const DISCONNECT_GRACE_MS = 1800;
 
 // Initialize Host Node [ U ]
 function initHostNode() {
@@ -32,14 +35,40 @@ function parseDeviceName(userAgent = '') {
   return 'Mobile Device';
 }
 
+function clearPendingDisconnect(clientId) {
+  if (!clientId) return;
+  const timer = PENDING_DISCONNECTS.get(clientId);
+  if (timer) {
+    clearTimeout(timer);
+    PENDING_DISCONNECTS.delete(clientId);
+  }
+}
+
+function schedulePendingDisconnect(clientId, graceMs = DISCONNECT_GRACE_MS) {
+  if (!clientId || clientId === 'host_master') return;
+  clearPendingDisconnect(clientId);
+  const timer = setTimeout(() => {
+    PENDING_DISCONNECTS.delete(clientId);
+    const sockets = CLIENT_SSE_SOCKETS.get(clientId);
+    if (!sockets || sockets.size === 0) {
+      unregisterMeshNode(clientId);
+    }
+  }, graceMs);
+  if (timer && typeof timer.unref === 'function') {
+    timer.unref();
+  }
+  PENDING_DISCONNECTS.set(clientId, timer);
+}
+
 /**
  * Removes expired non-host nodes whose heartbeat lease timed out.
  */
-export function pruneStaleNodes(timeoutMs = 35000) {
+export function pruneStaleNodes(timeoutMs = 18000) {
   const now = Date.now();
   let changed = false;
   for (const [slot, node] of MESH_NODES.entries()) {
     if (!node.isHost && (now - node.lastSeen > timeoutMs)) {
+      clearPendingDisconnect(node.clientId);
       MESH_NODES.delete(slot);
       changed = true;
     }
@@ -48,7 +77,17 @@ export function pruneStaleNodes(timeoutMs = 35000) {
   return changed;
 }
 
-const staleSweepTimer = setInterval(() => pruneStaleNodes(), 15000);
+const staleSweepTimer = setInterval(() => {
+  pruneStaleNodes();
+  for (const res of SSE_CLIENTS) {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      SSE_CLIENTS.delete(res);
+      LOCAL_SSE_CLIENTS.delete(res);
+    }
+  }
+}, 5000);
 if (staleSweepTimer && typeof staleSweepTimer.unref === 'function') {
   staleSweepTimer.unref();
 }
@@ -58,6 +97,7 @@ if (staleSweepTimer && typeof staleSweepTimer.unref === 'function') {
  * Loopback host sessions attach to [ U ] without consuming a mobile slot.
  */
 export function registerMeshNode(clientId, userAgent = '', { isLocalHost = false } = {}) {
+  clearPendingDisconnect(clientId);
   pruneStaleNodes();
 
   if (isLocalHost) {
@@ -108,6 +148,7 @@ export function registerMeshNode(clientId, userAgent = '', { isLocalHost = false
  * Unregisters a client from the mesh ring.
  */
 export function unregisterMeshNode(clientId) {
+  clearPendingDisconnect(clientId);
   for (const [slot, node] of MESH_NODES.entries()) {
     if (node.clientId === clientId && slot !== 'U') {
       MESH_NODES.delete(slot);
@@ -119,9 +160,10 @@ export function unregisterMeshNode(clientId) {
 }
 
 /**
- * Updates node heartbeat and prunes stale nodes (inactive for > 35 seconds).
+ * Updates node heartbeat and prunes stale nodes.
  */
 export function updateHeartbeat(clientId) {
+  clearPendingDisconnect(clientId);
   for (const [slot, node] of MESH_NODES.entries()) {
     if (node.clientId === clientId) {
       node.lastSeen = Date.now();
@@ -158,10 +200,23 @@ export function getMeshRing() {
   });
 }
 
+function sendSseToAll(eventObj) {
+  const payload = JSON.stringify(eventObj);
+  for (const res of SSE_CLIENTS) {
+    try {
+      res.write(`data: ${payload}\n\n`);
+    } catch {
+      SSE_CLIENTS.delete(res);
+      LOCAL_SSE_CLIENTS.delete(res);
+    }
+  }
+}
+
 /**
  * Registers an active Server-Sent Events (SSE) response channel.
+ * Tracks per-clientId SSE connections so dropped tabs/devices clear promptly.
  */
-export function addSSEClient(res, req = null) {
+export function addSSEClient(res, req = null, clientId = null) {
   SSE_CLIENTS.add(res);
 
   const remoteIp = req?.socket?.remoteAddress || '';
@@ -170,12 +225,40 @@ export function addSSEClient(res, req = null) {
     LOCAL_SSE_CLIENTS.add(res);
   }
 
+  let resolvedClientId = clientId;
+  if (!resolvedClientId && req?.url) {
+    try {
+      const parsed = new URL(req.url, 'http://localhost');
+      resolvedClientId = parsed.searchParams.get('clientId');
+    } catch {}
+  }
+
+  if (resolvedClientId) {
+    clearPendingDisconnect(resolvedClientId);
+    let sockets = CLIENT_SSE_SOCKETS.get(resolvedClientId);
+    if (!sockets) {
+      sockets = new Set();
+      CLIENT_SSE_SOCKETS.set(resolvedClientId, sockets);
+    }
+    sockets.add(res);
+  }
+
   // Send initial state immediately
   res.write(`data: ${JSON.stringify({ type: 'ring_update', ring: getMeshRing() })}\n\n`);
 
   res.on('close', () => {
     SSE_CLIENTS.delete(res);
     LOCAL_SSE_CLIENTS.delete(res);
+    if (resolvedClientId) {
+      const sockets = CLIENT_SSE_SOCKETS.get(resolvedClientId);
+      if (sockets) {
+        sockets.delete(res);
+        if (sockets.size === 0) {
+          CLIENT_SSE_SOCKETS.delete(resolvedClientId);
+          schedulePendingDisconnect(resolvedClientId);
+        }
+      }
+    }
   });
 }
 
@@ -190,14 +273,7 @@ export function hasActiveLocalViewer() {
  * Broadcasts ring updates to all connected devices.
  */
 export function broadcastRingUpdate() {
-  const payload = JSON.stringify({ type: 'ring_update', ring: getMeshRing() });
-  for (const res of SSE_CLIENTS) {
-    try {
-      res.write(`data: ${payload}\n\n`);
-    } catch (e) {
-      SSE_CLIENTS.delete(res);
-    }
-  }
+  sendSseToAll({ type: 'ring_update', ring: getMeshRing() });
 }
 
 /**
@@ -205,16 +281,8 @@ export function broadcastRingUpdate() {
  * Powers the Liquid Glass Dynamic Island on desktop and connected devices.
  */
 export function broadcastHostTransferEvent(event) {
-  const payload = JSON.stringify(event);
-  for (const res of SSE_CLIENTS) {
-    try {
-      res.write(`data: ${payload}\n\n`);
-    } catch (e) {
-      SSE_CLIENTS.delete(res);
-    }
-  }
+  sendSseToAll(event);
 }
-
 
 /**
  * Dispatches an inter-node file transfer alert across the mesh.
@@ -222,7 +290,7 @@ export function broadcastHostTransferEvent(event) {
  */
 export function dispatchMeshTransfer({ fromSlot, toSlot, fileName, fileSize, downloadUrl }) {
   const ctx = getFileContextMeta(fileName);
-  const payload = JSON.stringify({
+  sendSseToAll({
     type: 'incoming_mesh_transfer',
     transfer: {
       fromSlot,
@@ -237,14 +305,6 @@ export function dispatchMeshTransfer({ fromSlot, toSlot, fileName, fileSize, dow
       timestamp: Date.now()
     }
   });
-
-  for (const res of SSE_CLIENTS) {
-    try {
-      res.write(`data: ${payload}\n\n`);
-    } catch (e) {
-      SSE_CLIENTS.delete(res);
-    }
-  }
 }
 
 

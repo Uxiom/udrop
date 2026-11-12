@@ -16,7 +16,7 @@ namespace UDrop {
     static class Program {
         private const int DefaultPort = 4040;
 
-        private static string GetPipeName() {
+        internal static string GetPipeName() {
             string user = Environment.UserName ?? "user";
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < user.Length; i++) {
@@ -211,6 +211,7 @@ namespace UDrop {
             };
             if (nativeOverlay) {
                 psi.EnvironmentVariables["UDROP_NATIVE_OVERLAY"] = "1";
+                psi.EnvironmentVariables["UDROP_TRAY_PIPE"] = Program.GetPipeName();
             }
 
             try {
@@ -283,6 +284,207 @@ namespace UDrop {
                 }
             } catch {
                 return false;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        public static void RevealInExplorerAndFocus(string targetPath, bool selectFile) {
+            string fallbackDir = GetDownloadFolder();
+            string resolved = (targetPath ?? "").Trim().Trim('"');
+            bool canSelect = selectFile && !string.IsNullOrEmpty(resolved) && File.Exists(resolved);
+            string targetDir = canSelect
+                ? Path.GetDirectoryName(resolved)
+                : ((!string.IsNullOrEmpty(resolved) && Directory.Exists(resolved))
+                    ? resolved
+                    : ((!string.IsNullOrEmpty(resolved) && Directory.Exists(Path.GetDirectoryName(resolved)))
+                        ? Path.GetDirectoryName(resolved)
+                        : fallbackDir));
+            if (string.IsNullOrEmpty(targetDir) || !Directory.Exists(targetDir)) {
+                targetDir = fallbackDir;
+            }
+
+            string folderName = Path.GetFileName(targetDir.TrimEnd('\\', '/'));
+            if (string.IsNullOrEmpty(folderName)) folderName = "uDrop";
+
+            HashSet<IntPtr> preExisting = SnapshotExplorerWindows(folderName);
+
+            try { AllowSetForegroundWindow(-1); } catch {}
+
+            try {
+                if (canSelect && !resolved.Contains(",")) {
+                    Process.Start(new ProcessStartInfo {
+                        FileName = "explorer.exe",
+                        Arguments = string.Format("/select,\"{0}\"", resolved),
+                        UseShellExecute = true
+                    });
+                } else {
+                    Process.Start(new ProcessStartInfo {
+                        FileName = "explorer.exe",
+                        Arguments = string.Format("\"{0}\"", targetDir),
+                        UseShellExecute = true
+                    });
+                }
+            } catch {}
+
+            ThreadPool.QueueUserWorkItem((state) => {
+                // Prefer newly opened Explorer window first; fall back to existing matching window if Explorer reused one
+                for (int attempt = 0; attempt < 18; attempt++) {
+                    Thread.Sleep(attempt == 0 ? 120 : 100);
+                    IntPtr found = FindExplorerWindowByFolder(folderName, preExisting);
+                    if (found == IntPtr.Zero && attempt >= 6) {
+                        found = FindExplorerWindowByFolder(folderName, null);
+                    }
+                    if (found != IntPtr.Zero) {
+                        ForceBringWindowToFront(found);
+                        return;
+                    }
+                }
+            });
+        }
+
+        private static HashSet<IntPtr> SnapshotExplorerWindows(string folderName) {
+            HashSet<IntPtr> set = new HashSet<IntPtr>();
+            string needle = (folderName ?? "").ToLowerInvariant();
+            try {
+                EnumWindows((hWnd, lParam) => {
+                    if (!IsWindowVisible(hWnd)) return true;
+                    StringBuilder cls = new StringBuilder(64);
+                    GetClassName(hWnd, cls, cls.Capacity);
+                    string clsName = cls.ToString();
+                    if (clsName == "CabinetWClass" || clsName == "ExploreWClass") {
+                        StringBuilder title = new StringBuilder(260);
+                        GetWindowText(hWnd, title, title.Capacity);
+                        string titleLower = title.ToString().ToLowerInvariant();
+                        if (string.IsNullOrEmpty(needle) || titleLower.Contains(needle)) {
+                            set.Add(hWnd);
+                        }
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            } catch {}
+            return set;
+        }
+
+        private static IntPtr FindExplorerWindowByFolder(string folderName, HashSet<IntPtr> excludeHandles) {
+            IntPtr match = IntPtr.Zero;
+            string needle = (folderName ?? "").ToLowerInvariant();
+            try {
+                EnumWindows((hWnd, lParam) => {
+                    if (excludeHandles != null && excludeHandles.Contains(hWnd)) return true;
+                    if (!IsWindowVisible(hWnd)) return true;
+                    StringBuilder cls = new StringBuilder(64);
+                    GetClassName(hWnd, cls, cls.Capacity);
+                    string clsName = cls.ToString();
+                    if (clsName == "CabinetWClass" || clsName == "ExploreWClass") {
+                        StringBuilder title = new StringBuilder(260);
+                        GetWindowText(hWnd, title, title.Capacity);
+                        string titleLower = title.ToString().ToLowerInvariant();
+                        if (string.IsNullOrEmpty(needle) || titleLower.Contains(needle)) {
+                            match = hWnd;
+                            return false;
+                        }
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            } catch {}
+            return match;
+        }
+
+        private static void ForceBringWindowToFront(IntPtr hwnd) {
+            if (hwnd == IntPtr.Zero) return;
+            uint curTid = GetCurrentThreadId();
+            uint fgTid = 0;
+            uint targetTid = 0;
+            bool attachedFg = false;
+            bool attachedTarget = false;
+            try {
+                AllowSetForegroundWindow(-1);
+                IntPtr fg = GetForegroundWindow();
+                uint tmpPid;
+                fgTid = fg != IntPtr.Zero ? GetWindowThreadProcessId(fg, out tmpPid) : 0;
+                targetTid = GetWindowThreadProcessId(hwnd, out tmpPid);
+
+                if (fgTid != 0 && fgTid != curTid) {
+                    attachedFg = AttachThreadInput(curTid, fgTid, true);
+                }
+                if (targetTid != 0 && targetTid != curTid && targetTid != fgTid) {
+                    attachedTarget = AttachThreadInput(curTid, targetTid, true);
+                }
+
+                ShowWindow(hwnd, IsIconic(hwnd) ? 9 : 5); // SW_RESTORE : SW_SHOW
+                // Temporarily toggle TOPMOST -> NOTOPMOST to raise above fullscreen/active Chrome
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                BringWindowToTop(hwnd);
+                SwitchToThisWindow(hwnd, true);
+                SetForegroundWindow(hwnd);
+
+                if (GetForegroundWindow() != hwnd) {
+                    // Bypass Windows foreground lock when invoked asynchronously from browser IPC
+                    keybd_event(0x12, 0x45, 0x0001, UIntPtr.Zero);
+                    keybd_event(0x12, 0x45, 0x0001 | 0x0002, UIntPtr.Zero);
+                    BringWindowToTop(hwnd);
+                    SetForegroundWindow(hwnd);
+                }
+            } catch {
+            } finally {
+                try { if (attachedTarget) AttachThreadInput(curTid, targetTid, false); } catch {}
+                try { if (attachedFg) AttachThreadInput(curTid, fgTid, false); } catch {}
             }
         }
 
@@ -387,6 +589,7 @@ namespace UDrop {
 
         private TrayFlyoutForm flyoutForm;
         private GlassQrOverlayForm glassOverlay;
+        private IosNotificationForm iosToast;
         private HotkeyWindow hotkeyWindow;
 
         private Icon iconOn;
@@ -395,6 +598,9 @@ namespace UDrop {
         private bool isBusy = false;
         private volatile bool shuttingDown = false;
         private System.Windows.Forms.Timer syncTimer;
+        private string lastNotifiedCompletedKey = "";
+        private string lastCompletedFilePath = "";
+        private bool notifyBaselineSeeded = false;
 
         public UDropTrayContext(string dir, int serverPort, string pipe, bool startOn, string initialShare) {
             this.baseDir = dir;
@@ -412,6 +618,8 @@ namespace UDrop {
                 () => SetPowerState(false, false, null),
                 OpenDownloadsFolder
             );
+
+            iosToast = new IosNotificationForm(OpenDownloadsFolder);
 
             flyoutForm = new TrayFlyoutForm(
                 port,
@@ -437,6 +645,14 @@ namespace UDrop {
                 Visible = true
             };
 
+            trayIcon.BalloonTipClicked += (s, e) => {
+                if (!string.IsNullOrEmpty(lastCompletedFilePath) && File.Exists(lastCompletedFilePath)) {
+                    EngineHelper.RevealInExplorerAndFocus(lastCompletedFilePath, true);
+                    return;
+                }
+                OpenDownloadsFolder();
+            };
+
             trayIcon.MouseClick += (s, e) => {
                 if (e.Button == MouseButtons.Left) {
                     if (flyoutForm.RecentlyDismissed) return;
@@ -455,7 +671,7 @@ namespace UDrop {
 
             StartPipeListener();
 
-            syncTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+            syncTimer = new System.Windows.Forms.Timer { Interval = 1800 };
             syncTimer.Tick += (s, e) => SyncEngineStateAsync();
             syncTimer.Start();
 
@@ -531,6 +747,9 @@ namespace UDrop {
 
             if (!targetOn) {
                 glassOverlay.HideOverlay();
+                if (iosToast != null) iosToast.DismissBanner();
+                notifyBaselineSeeded = false;
+                lastNotifiedCompletedKey = "";
             }
 
             ThreadPool.QueueUserWorkItem((state) => {
@@ -575,14 +794,80 @@ namespace UDrop {
             if (isBusy || shuttingDown) return;
             ThreadPool.QueueUserWorkItem((state) => {
                 bool alive = EngineHelper.IsEngineRunning(port);
-                if (alive != isOn && !isBusy && !shuttingDown) {
-                    PostToUi(() => {
-                        isOn = alive;
-                        if (!isOn) glassOverlay.HideOverlay();
-                        RefreshTrayUi();
-                    });
+                string newestKey = null;
+                string newestName = null;
+                string newestPath = null;
+                long newestSize = 0;
+                string newestFrom = null;
+
+                if (alive) {
+                    try {
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(string.Format("http://127.0.0.1:{0}/api/overlay/state", port));
+                        req.Timeout = 1000;
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                        using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
+                            JavaScriptSerializer ser = new JavaScriptSerializer();
+                            Dictionary<string, object> data = ser.DeserializeObject(sr.ReadToEnd()) as Dictionary<string, object>;
+                            object[] recents = (data != null && data.ContainsKey("recentCompleted")) ? data["recentCompleted"] as object[] : null;
+                            if (recents != null && recents.Length > 0) {
+                                Dictionary<string, object> top = recents[0] as Dictionary<string, object>;
+                                if (top != null) {
+                                    string st = top.ContainsKey("status") ? Convert.ToString(top["status"]) : "completed";
+                                    if (st == "completed") {
+                                        newestName = top.ContainsKey("fileName") ? Convert.ToString(top["fileName"]) : "";
+                                        newestPath = top.ContainsKey("filePath") ? Convert.ToString(top["filePath"]) : "";
+                                        newestSize = top.ContainsKey("fileSize") ? Convert.ToInt64(top["fileSize"]) : 0;
+                                        newestFrom = top.ContainsKey("fromSlot") ? Convert.ToString(top["fromSlot"]) : "Peer";
+                                        string ts = top.ContainsKey("timestamp") ? Convert.ToString(top["timestamp"]) : "";
+                                        newestKey = newestName + "|" + newestPath + "|" + ts;
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
                 }
+
+                PostToUi(() => {
+                    if (shuttingDown) return;
+                    if (alive != isOn && !isBusy) {
+                        isOn = alive;
+                        if (!isOn) {
+                            glassOverlay.HideOverlay();
+                            notifyBaselineSeeded = false;
+                            lastNotifiedCompletedKey = "";
+                        }
+                        RefreshTrayUi();
+                    }
+                    if (alive && !string.IsNullOrEmpty(newestKey)) {
+                        if (!notifyBaselineSeeded) {
+                            notifyBaselineSeeded = true;
+                            lastNotifiedCompletedKey = newestKey;
+                            lastCompletedFilePath = newestPath;
+                        } else if (newestKey != lastNotifiedCompletedKey) {
+                            lastNotifiedCompletedKey = newestKey;
+                            lastCompletedFilePath = newestPath;
+                            string sizeLabel = FormatBytesBrief(newestSize);
+                            iosToast.ShowNotification(
+                                "File Received",
+                                newestName,
+                                string.Format("{0}  •  From [ {1} ]  •  Downloads\\uDrop", sizeLabel, newestFrom),
+                                newestPath
+                            );
+                        }
+                    } else if (alive && !notifyBaselineSeeded) {
+                        notifyBaselineSeeded = true;
+                    }
+                });
             });
+        }
+
+        private static string FormatBytesBrief(long bytes) {
+            if (bytes <= 0) return "0 B";
+            string[] u = { "B", "KB", "MB", "GB" };
+            int i = 0;
+            double v = bytes;
+            while (v >= 1024.0 && i < u.Length - 1) { v /= 1024.0; i++; }
+            return string.Format("{0:0.#} {1}", v, u[i]);
         }
 
         private void StartPipeListener() {
@@ -628,6 +913,12 @@ namespace UDrop {
                 } else if (cmd.StartsWith("SHARE|")) {
                     string path = cmd.Substring("SHARE|".Length);
                     HandleShareRequest(path);
+                } else if (cmd.StartsWith("REVEAL|")) {
+                    string path = cmd.Substring("REVEAL|".Length);
+                    EngineHelper.RevealInExplorerAndFocus(path, true);
+                } else if (cmd.StartsWith("OPENDIR|")) {
+                    string path = cmd.Substring("OPENDIR|".Length);
+                    EngineHelper.RevealInExplorerAndFocus(path, false);
                 }
             });
         }
@@ -646,13 +937,7 @@ namespace UDrop {
         }
 
         private void OpenDownloadsFolder() {
-            try {
-                Process.Start(new ProcessStartInfo {
-                    FileName = "explorer.exe",
-                    Arguments = "\"" + EngineHelper.GetDownloadFolder() + "\"",
-                    UseShellExecute = true
-                });
-            } catch {}
+            EngineHelper.RevealInExplorerAndFocus(EngineHelper.GetDownloadFolder(), false);
         }
 
         private void OpenWebDashboard() {
@@ -672,6 +957,7 @@ namespace UDrop {
             if (syncTimer != null) syncTimer.Stop();
             if (hotkeyWindow != null) hotkeyWindow.Dispose();
             glassOverlay.HideOverlay();
+            if (iosToast != null) iosToast.DismissBanner();
             flyoutForm.DismissFlyout();
             trayIcon.Visible = false;
 

@@ -49,7 +49,7 @@ async function runTests() {
     assert(htmlRes.status === 200, 'Serves PWA frontend on root route');
     const htmlText = await htmlRes.text();
     assert(htmlText.includes('uDrop'), 'PWA HTML contains uDrop branding');
-    assert(htmlText.includes('UXIOM Ring Topology'), 'PWA HTML contains UXIOM Ring Mesh component');
+    assert(htmlText.includes('Connected Devices') && htmlText.includes('id="meshRing"'), 'PWA HTML contains UXIOM Device Linking Diagram');
 
     const qrSvgRes = await fetch(`${BASE_URL}/api/qr.svg?theme=orange`);
     assert(qrSvgRes.status === 200, 'GET /api/qr.svg serves custom vector SVG card');
@@ -304,6 +304,17 @@ async function runTests() {
     const openFileData = await openFileRes.json();
     assert(openFileData.success === true, 'open-file reports target path');
 
+    const openMissingFileRes = await fetch(`${BASE_URL}/api/open-file`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: 'nonexistent-moved-file.mp4' })
+    });
+    const openMissingFileData = await openMissingFileRes.json();
+    assert(
+      openMissingFileRes.status === 200 && openMissingFileData.targetPath === path.resolve(downloadDir),
+      'POST /api/open-file falls back to uDrop download directory when file was moved or renamed'
+    );
+
     // -------------------------------------------------------------
     // Test 7: Liquid Glass Optical Pairing Overlay Modal
     // -------------------------------------------------------------
@@ -497,9 +508,77 @@ async function runTests() {
         'Untrusted .svg forces attachment + octet-stream even with ?inline=1'
       );
 
+      const htmlText = await (await fetch(`${BASE_URL}/`)).text();
       const appJsText = await (await fetch(`${BASE_URL}/app.js`)).text();
       assert(appJsText.includes('getClientFileContext') && appJsText.includes('Save Photo') && appJsText.includes('Add Contact'), 'Web UI includes context-aware handoff actions');
+      assert(appJsText.includes('SMALL_FILE_THRESHOLD_BYTES') && appJsText.includes('parallelWorker'), 'Web UI routes <10MB batches sequentially on single pipe and >=10MB batches in parallel');
+      assert(
+        htmlText.includes('receiveToastIcon') &&
+        htmlText.includes('lucide-download') &&
+        appJsText.includes('renderLucideSvg') &&
+        !htmlText.includes('cdn.') &&
+        !appJsText.includes('lucide.dev'),
+        'Notification and download controls use 100% offline inline Lucide SVGs'
+      );
+      assert(
+        appJsText.includes('targetDisconnected') &&
+        appJsText.includes('/api/mesh/events?clientId='),
+        'Web UI attaches clientId to SSE stream and resets target when remote slot disconnects'
+      );
       assert(fs.existsSync(path.join(process.cwd(), 'PROTOCOL.md')), 'Repository ships explicit PROTOCOL.md wire spec');
+
+      // -------------------------------------------------------------
+      // Test 11: Real-time SSE Disconnect Grace Auto-Cleanup Sync
+      // -------------------------------------------------------------
+      await fetch(`${BASE_URL}/api/mesh/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client_sse_drop', userAgent: 'iPhone' })
+      });
+
+      let sawPresentFirst = false;
+      let sawDropBroadcast = false;
+      const watcherReq = http.get(`${BASE_URL}/api/mesh/events?clientId=host_watcher`, (watchRes) => {
+        watchRes.setEncoding('utf8');
+        watchRes.on('data', (chunk) => {
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === 'ring_update' && Array.isArray(evt.ring)) {
+                const stillPresent = evt.ring.some(n => n.assigned && n.clientId === 'client_sse_drop');
+                if (stillPresent) {
+                  sawPresentFirst = true;
+                } else if (sawPresentFirst) {
+                  sawDropBroadcast = true;
+                }
+              }
+            } catch {}
+          }
+        });
+      });
+
+      const mobileSseReq = http.get(`${BASE_URL}/api/mesh/events?clientId=client_sse_drop`, (mobRes) => {
+        // Simulate abrupt tab close without beforeunload beacon after SSE connects
+        setTimeout(() => {
+          try { mobRes.destroy(); } catch {}
+          try { mobileSseReq.destroy(); } catch {}
+        }, 120);
+      });
+
+      await new Promise((resolve) => {
+        const deadline = Date.now() + 4000;
+        const poll = setInterval(() => {
+          if (sawDropBroadcast || Date.now() >= deadline) {
+            clearInterval(poll);
+            resolve();
+          }
+        }, 80);
+      });
+
+      try { watcherReq.destroy(); } catch {}
+      assert(sawPresentFirst && sawDropBroadcast, 'Abrupt SSE stream closure auto-clears disconnected slot and broadcasts ring_update to remaining devices');
     } finally {
       fs.rmSync(tmpPhoto, { force: true });
       fs.rmSync(tmpVcf, { force: true });

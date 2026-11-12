@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <style>
     body {
-      background: rgba(10, 11, 16, 0.95);
+      background: var(--island-bg);
       margin: 0;
       padding: 0;
       min-height: 100vh;
@@ -16,7 +16,7 @@
       align-items: center;
       justify-content: flex-start;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font-family);
     }
     .hud-backdrop {
       width: 100%;
@@ -27,12 +27,12 @@
       padding-top: 24px;
     }
     .hud-hint {
-      margin-top: 130px;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.4);
+      margin-top: 128px;
+      font-size: 12px;
+      color: var(--glass-40);
       letter-spacing: 0.3px;
       text-align: center;
-      font-family: ui-monospace, monospace;
+      font-family: var(--font-mono);
     }
     .hud-hint a {
       color: var(--accent-cyan);
@@ -69,7 +69,7 @@
             </div>
             <div class="island-filename" id="islandFileName">filename.ext</div>
             <div class="island-progress-track">
-              <div id="islandProgressBar" class="island-progress-fill" style="width: 0%"></div>
+              <div id="islandProgressBar" class="island-progress-fill"></div>
             </div>
           </div>
           <div class="island-right">
