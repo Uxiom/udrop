@@ -980,6 +980,7 @@ body {
   flex-shrink: 0;
   transform: translateX(0);
   will-change: transform;
+  touch-action: none;
 }
 
 .slide-puck.dragged {

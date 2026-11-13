@@ -91,6 +91,12 @@ const slideProgress = document.getElementById('slideProgress');
 const slideLabel = document.getElementById('slideLabel');
 const slidePuck = document.getElementById('slidePuck');
 
+let stagedFilesList = [];
+let isSlideDragging = false;
+let slideStartX = 0;
+let slideCurrentX = 0;
+let slideMaxX = 0;
+
 // AirDrop Sheet Elements
 const airdropModal = document.getElementById('airdropModal');
 const airdropModalBackdrop = document.getElementById('airdropModalBackdrop');
@@ -1684,11 +1690,6 @@ if (cancelTransferBtn) {
 // =========================================================
 let activeBatchQueue = [];
 let isProcessingQueue = false;
-let stagedFilesList = [];
-let isSlideDragging = false;
-let slideStartX = 0;
-let slideCurrentX = 0;
-let slideMaxX = 0;
 
 function stageFiles(files) {
   if (!files || files.length === 0) return;
@@ -1811,6 +1812,54 @@ if (slidePuck && slideTrack) {
 
   slidePuck.addEventListener('pointerup', onPointerUp);
   slidePuck.addEventListener('pointercancel', onPointerUp);
+
+  // Dedicated iOS Safari touch event handlers
+  slidePuck.addEventListener('touchstart', (e) => {
+    if (e.touches && e.touches[0]) {
+      isSlideDragging = true;
+      slidePuck.classList.add('dragged');
+      slidePuck.classList.remove('animating');
+      slideTrack.classList.add('dragging');
+      slideStartX = e.touches[0].clientX;
+      const trackWidth = slideTrack.getBoundingClientRect().width;
+      const puckWidth = slidePuck.getBoundingClientRect().width;
+      slideMaxX = Math.max(1, trackWidth - puckWidth - 8);
+      slideCurrentX = 0;
+    }
+  }, { passive: true });
+
+  slidePuck.addEventListener('touchmove', (e) => {
+    if (!isSlideDragging || !e.touches || !e.touches[0]) return;
+    const delta = Math.max(0, Math.min(slideMaxX, e.touches[0].clientX - slideStartX));
+    slideCurrentX = delta;
+    slidePuck.style.transform = `translateX(${delta}px)`;
+    slideProgress.style.width = `${delta + 24}px`;
+    const ratio = slideMaxX > 0 ? delta / slideMaxX : 0;
+    slideLabel.style.opacity = `${Math.max(0, 1 - ratio * 1.5)}`;
+  }, { passive: true });
+
+  slidePuck.addEventListener('touchend', () => {
+    if (!isSlideDragging) return;
+    isSlideDragging = false;
+    slidePuck.classList.remove('dragged');
+    slideTrack.classList.remove('dragging');
+    const threshold = slideMaxX * 0.75;
+    if (slideCurrentX >= threshold) {
+      triggerSlideLaunch();
+    } else {
+      slidePuck.classList.add('animating');
+      slidePuck.style.transform = 'translateX(0px)';
+      slideProgress.style.width = '0px';
+      slideLabel.style.opacity = '1';
+    }
+  });
+
+  // Tap-to-beam fallback for fast one-tap sending on mobile & desktop
+  slideTrack.addEventListener('click', () => {
+    if (!isSlideDragging && slideCurrentX === 0) {
+      triggerSlideLaunch();
+    }
+  });
 
   slideTrack.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
