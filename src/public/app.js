@@ -79,36 +79,6 @@ const incomingContextBtn = document.getElementById('incomingContextBtn');
 const incomingDownloadBtn = document.getElementById('incomingDownloadBtn');
 const dismissIncomingBtn = document.getElementById('dismissIncomingBtn');
 
-// Staged Slide-to-Beam Elements
-const stagedTransferArea = document.getElementById('stagedTransferArea');
-const stagedCountBadge = document.getElementById('stagedCountBadge');
-const cancelStagedBtn = document.getElementById('cancelStagedBtn');
-const stagedThumb = document.getElementById('stagedThumb');
-const stagedFileName = document.getElementById('stagedFileName');
-const stagedFileSize = document.getElementById('stagedFileSize');
-const slideTrack = document.getElementById('slideTrack');
-const slideProgress = document.getElementById('slideProgress');
-const slideLabel = document.getElementById('slideLabel');
-const slidePuck = document.getElementById('slidePuck');
-
-let stagedFilesList = [];
-let isSlideDragging = false;
-let slideStartX = 0;
-let slideCurrentX = 0;
-let slideMaxX = 0;
-
-// AirDrop Sheet Elements
-const airdropModal = document.getElementById('airdropModal');
-const airdropModalBackdrop = document.getElementById('airdropModalBackdrop');
-const airdropTitle = document.getElementById('airdropTitle');
-const airdropSubtitle = document.getElementById('airdropSubtitle');
-const airdropImgPreview = document.getElementById('airdropImgPreview');
-const airdropIconWrapper = document.getElementById('airdropIconWrapper');
-const airdropFileName = document.getElementById('airdropFileName');
-const airdropFileSize = document.getElementById('airdropFileSize');
-const airdropDeclineBtn = document.getElementById('airdropDeclineBtn');
-const airdropAcceptBtn = document.getElementById('airdropAcceptBtn');
-
 // Liquid Glass Dynamic Island Elements
 const dynamicIsland = document.getElementById('dynamicIsland');
 const islandFromNode = document.getElementById('islandFromNode');
@@ -766,9 +736,6 @@ function selectTarget(slot, label) {
   if (dropzoneActionText) {
     dropzoneActionText.textContent = `Tap or Drag to Beam to ${label}`;
   }
-  if (slideLabel && stagedFilesList.length > 0) {
-    slideLabel.textContent = `Slide to Beam to [ ${targetSlot} ]`;
-  }
   syncKineticBeamSlots();
   renderRing(currentRingState);
 }
@@ -1144,88 +1111,14 @@ if (qrModalBackdrop) {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (qrGlassModal && !qrGlassModal.classList.contains('hidden')) {
-      closeQrModal();
-    }
-    if (airdropModal && !airdropModal.classList.contains('hidden')) {
-      closeAirdropSheet();
-    }
+  if (e.key === 'Escape' && qrGlassModal && !qrGlassModal.classList.contains('hidden')) {
+    closeQrModal();
   }
 });
 
 // Auto-open modal if requested via URL (?pair, ?qr) or hash #qr
 if (window.location.search.includes('pair') || window.location.search.includes('qr') || window.location.hash === '#qr') {
   setTimeout(openQrModal, 120);
-}
-
-// AirDrop-Style Preview Sheet Management
-let pendingAirdropTransfer = null;
-
-function openAirdropSheet(transfer) {
-  if (!airdropModal) return;
-  pendingAirdropTransfer = transfer;
-
-  const ctx = getClientFileContext(transfer.fileName, transfer);
-  if (airdropTitle) airdropTitle.textContent = 'uDrop';
-  if (airdropSubtitle) {
-    const from = transfer.fromSlot ? `Node [ ${transfer.fromSlot} ]` : 'Device';
-    airdropSubtitle.textContent = `${from} would like to share`;
-  }
-  if (airdropFileName) airdropFileName.textContent = transfer.fileName;
-  if (airdropFileSize) airdropFileSize.textContent = formatBytes(transfer.fileSize);
-
-  if (ctx.category === 'photo' && airdropImgPreview) {
-    airdropImgPreview.src = `${transfer.downloadUrl}?inline=1`;
-    airdropImgPreview.classList.remove('hidden');
-    if (airdropIconWrapper) airdropIconWrapper.classList.add('hidden');
-  } else {
-    if (airdropImgPreview) {
-      airdropImgPreview.classList.add('hidden');
-      airdropImgPreview.src = '';
-    }
-    if (airdropIconWrapper) {
-      airdropIconWrapper.classList.remove('hidden');
-      airdropIconWrapper.innerHTML = renderLucideSvg(getCategoryLucideName(ctx.category), 36, 1.8);
-    }
-  }
-
-  airdropModal.classList.remove('hidden');
-  airdropModal.setAttribute('aria-hidden', 'false');
-  playSuccessChime();
-}
-
-function closeAirdropSheet() {
-  if (!airdropModal) return;
-  airdropModal.classList.add('hidden');
-  airdropModal.setAttribute('aria-hidden', 'true');
-  pendingAirdropTransfer = null;
-}
-
-if (airdropDeclineBtn) {
-  airdropDeclineBtn.addEventListener('click', closeAirdropSheet);
-}
-
-if (airdropModalBackdrop) {
-  airdropModalBackdrop.addEventListener('click', closeAirdropSheet);
-}
-
-if (airdropAcceptBtn) {
-  airdropAcceptBtn.addEventListener('click', () => {
-    if (pendingAirdropTransfer) {
-      const transfer = pendingAirdropTransfer;
-      closeAirdropSheet();
-
-      const a = document.createElement('a');
-      a.href = transfer.downloadUrl;
-      a.download = transfer.fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } else {
-      closeAirdropSheet();
-    }
-  });
 }
 
 let activeIncomingTransfer = null;
@@ -1240,7 +1133,6 @@ function handleIncomingMeshTransfer(transfer) {
   if (incomingTransferCard) {
     const ctx = getClientFileContext(transfer.fileName, transfer);
     activeIncomingTransfer = { ...transfer, ctx };
-    openAirdropSheet(transfer);
 
     incomingFromText.textContent = `From Node [ ${transfer.fromSlot} ] -> [ ${transfer.toSlot} ]`;
     incomingFileName.textContent = transfer.fileName;
@@ -1686,203 +1578,12 @@ if (cancelTransferBtn) {
 }
 
 // =========================================================
-// 6. Resilient Multi-Video Batch Queue Engine & Slide-to-Beam
+// 6. Resilient Multi-Video Batch Queue Engine
 // =========================================================
 let activeBatchQueue = [];
 let isProcessingQueue = false;
 
-function stageFiles(files) {
-  if (!files || files.length === 0) return;
-  stagedFilesList = files;
-
-  if (stagedCountBadge) {
-    stagedCountBadge.textContent = `${files.length} File${files.length > 1 ? 's' : ''} Ready`;
-  }
-  if (stagedFileName) {
-    stagedFileName.textContent = files.length > 1 ? `${files[0].name} (+${files.length - 1} more)` : files[0].name;
-  }
-  if (stagedFileSize) {
-    const totalBytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
-    stagedFileSize.textContent = formatBytes(totalBytes);
-  }
-
-  if (stagedThumb) {
-    if (files[0].type && files[0].type.startsWith('image/')) {
-      const url = URL.createObjectURL(files[0]);
-      stagedThumb.innerHTML = `<img src="${url}" alt="Preview" />`;
-    } else {
-      stagedThumb.innerHTML = renderLucideSvg('file', 22, 1.8);
-    }
-  }
-
-  if (slideLabel) {
-    slideLabel.textContent = `Slide to Beam to [ ${targetSlot || 'U'} ]`;
-    slideLabel.style.opacity = '1';
-  }
-
-  if (slidePuck) {
-    slidePuck.classList.remove('animating', 'dragged');
-    slidePuck.style.transform = 'translateX(0px)';
-  }
-  if (slideProgress) {
-    slideProgress.style.width = '0px';
-  }
-
-  if (dropzone) dropzone.classList.add('hidden');
-  if (stagedTransferArea) stagedTransferArea.classList.remove('hidden');
-}
-
-function clearStagedFiles() {
-  stagedFilesList = [];
-  if (stagedTransferArea) stagedTransferArea.classList.add('hidden');
-  if (dropzone) dropzone.classList.remove('hidden');
-  if (fileInput) fileInput.value = '';
-  if (mediaInput) mediaInput.value = '';
-}
-
-function triggerSlideLaunch() {
-  const puckW = slidePuck ? slidePuck.getBoundingClientRect().width : 48;
-  const trackW = slideTrack ? slideTrack.getBoundingClientRect().width : 260;
-  const maxDelta = Math.max(1, trackW - puckW - 8);
-
-  if (slidePuck) {
-    slidePuck.classList.add('animating');
-    slidePuck.style.transform = `translateX(${maxDelta}px)`;
-  }
-  if (slideProgress) {
-    slideProgress.style.width = '100%';
-  }
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    try { navigator.vibrate(20); } catch {}
-  }
-
-  setTimeout(() => {
-    const filesToSend = [...stagedFilesList];
-    clearStagedFiles();
-    if (filesToSend.length > 0) {
-      processQueuedFiles(filesToSend);
-    }
-  }, 160);
-}
-
-if (slidePuck && slideTrack) {
-  slidePuck.addEventListener('pointerdown', (e) => {
-    isSlideDragging = true;
-    slidePuck.setPointerCapture(e.pointerId);
-    slidePuck.classList.add('dragged');
-    slidePuck.classList.remove('animating');
-    slideTrack.classList.add('dragging');
-    slideStartX = e.clientX;
-
-    const trackWidth = slideTrack.getBoundingClientRect().width;
-    const puckWidth = slidePuck.getBoundingClientRect().width;
-    slideMaxX = Math.max(1, trackWidth - puckWidth - 8);
-    slideCurrentX = 0;
-  });
-
-  slidePuck.addEventListener('pointermove', (e) => {
-    if (!isSlideDragging) return;
-    const delta = Math.max(0, Math.min(slideMaxX, e.clientX - slideStartX));
-    slideCurrentX = delta;
-    slidePuck.style.transform = `translateX(${delta}px)`;
-    slideProgress.style.width = `${delta + 24}px`;
-
-    const ratio = slideMaxX > 0 ? delta / slideMaxX : 0;
-    slideLabel.style.opacity = `${Math.max(0, 1 - ratio * 1.5)}`;
-    slideTrack.setAttribute('aria-valuenow', Math.round(ratio * 100));
-  });
-
-  const onPointerUp = () => {
-    if (!isSlideDragging) return;
-    isSlideDragging = false;
-    slidePuck.classList.remove('dragged');
-    slideTrack.classList.remove('dragging');
-
-    const threshold = slideMaxX * 0.80;
-    if (slideCurrentX >= threshold) {
-      triggerSlideLaunch();
-    } else {
-      slidePuck.classList.add('animating');
-      slidePuck.style.transform = 'translateX(0px)';
-      slideProgress.style.width = '0px';
-      slideLabel.style.opacity = '1';
-      slideTrack.setAttribute('aria-valuenow', 0);
-    }
-  };
-
-  slidePuck.addEventListener('pointerup', onPointerUp);
-  slidePuck.addEventListener('pointercancel', onPointerUp);
-
-  // Dedicated iOS Safari touch event handlers
-  slidePuck.addEventListener('touchstart', (e) => {
-    if (e.touches && e.touches[0]) {
-      isSlideDragging = true;
-      slidePuck.classList.add('dragged');
-      slidePuck.classList.remove('animating');
-      slideTrack.classList.add('dragging');
-      slideStartX = e.touches[0].clientX;
-      const trackWidth = slideTrack.getBoundingClientRect().width;
-      const puckWidth = slidePuck.getBoundingClientRect().width;
-      slideMaxX = Math.max(1, trackWidth - puckWidth - 8);
-      slideCurrentX = 0;
-    }
-  }, { passive: true });
-
-  slidePuck.addEventListener('touchmove', (e) => {
-    if (!isSlideDragging || !e.touches || !e.touches[0]) return;
-    const delta = Math.max(0, Math.min(slideMaxX, e.touches[0].clientX - slideStartX));
-    slideCurrentX = delta;
-    slidePuck.style.transform = `translateX(${delta}px)`;
-    slideProgress.style.width = `${delta + 24}px`;
-    const ratio = slideMaxX > 0 ? delta / slideMaxX : 0;
-    slideLabel.style.opacity = `${Math.max(0, 1 - ratio * 1.5)}`;
-  }, { passive: true });
-
-  slidePuck.addEventListener('touchend', () => {
-    if (!isSlideDragging) return;
-    isSlideDragging = false;
-    slidePuck.classList.remove('dragged');
-    slideTrack.classList.remove('dragging');
-    const threshold = slideMaxX * 0.75;
-    if (slideCurrentX >= threshold) {
-      triggerSlideLaunch();
-    } else {
-      slidePuck.classList.add('animating');
-      slidePuck.style.transform = 'translateX(0px)';
-      slideProgress.style.width = '0px';
-      slideLabel.style.opacity = '1';
-    }
-  });
-
-  // Tap-to-beam fallback for fast one-tap sending on mobile & desktop
-  slideTrack.addEventListener('click', () => {
-    if (!isSlideDragging && slideCurrentX === 0) {
-      triggerSlideLaunch();
-    }
-  });
-
-  slideTrack.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      triggerSlideLaunch();
-    }
-  });
-}
-
-if (cancelStagedBtn) {
-  cancelStagedBtn.addEventListener('click', clearStagedFiles);
-}
-
 async function handleFiles(newFiles) {
-  if (!newFiles || newFiles.length === 0) return;
-  if (isProcessingQueue) {
-    processQueuedFiles(newFiles);
-    return;
-  }
-  stageFiles(newFiles);
-}
-
-async function processQueuedFiles(newFiles) {
   if (!newFiles || newFiles.length === 0) return;
 
   // If previous queue is completed or stopped, ALWAYS clean the slate!
