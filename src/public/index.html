@@ -43,6 +43,36 @@
     </div>
   </div>
 
+  <!-- AirDrop-Style Incoming Beam Sheet / Modal -->
+  <div id="airdropModal" class="glass-modal-overlay hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="airdropTitle">
+    <div class="glass-modal-backdrop" id="airdropModalBackdrop"></div>
+    <div class="airdrop-modal-container">
+      <div class="airdrop-sheet-panel">
+        <div class="airdrop-sheet-header">
+          <h2 id="airdropTitle" class="airdrop-title">uDrop</h2>
+          <p id="airdropSubtitle" class="airdrop-subtitle">Incoming File Beam</p>
+        </div>
+        <div class="airdrop-sheet-preview">
+          <div id="airdropPreviewViewport" class="airdrop-preview-viewport">
+            <img id="airdropImgPreview" class="airdrop-img-preview hidden" alt="Incoming file preview" width="280" height="180" loading="lazy" />
+            <div id="airdropIconWrapper" class="airdrop-icon-wrapper">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            </div>
+          </div>
+          <div class="airdrop-file-meta">
+            <span id="airdropFileName" class="airdrop-file-name">filename.jpg</span>
+            <span id="airdropFileSize" class="airdrop-file-size">0 MB</span>
+          </div>
+        </div>
+        <div class="airdrop-sheet-actions">
+          <button id="airdropDeclineBtn" type="button" class="btn-airdrop-decline">Decline</button>
+          <div class="airdrop-action-separator" aria-hidden="true"></div>
+          <button id="airdropAcceptBtn" type="button" class="btn-airdrop-accept">Accept</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- iOS-Style Floating Liquid Glass Notification Banner -->
   <div id="receiveToast" class="receive-toast hidden" role="status" aria-live="polite">
     <div class="receive-toast-appicon" aria-hidden="true">
@@ -146,6 +176,36 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                 <span>All Files</span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Staged Slide-to-Beam Action Card -->
+        <div id="stagedTransferArea" class="staged-transfer-area hidden">
+          <div class="staged-header">
+            <div class="staged-badge">
+              <span class="staged-badge-dot"></span>
+              <span id="stagedCountBadge">1 File Ready</span>
+            </div>
+            <button id="cancelStagedBtn" type="button" class="btn-cancel-staged" aria-label="Cancel staged files" title="Cancel">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="staged-preview-row">
+            <div id="stagedThumb" class="staged-thumb">
+              <svg class="staged-file-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            </div>
+            <div class="staged-meta">
+              <span id="stagedFileName" class="staged-file-name">filename.mov</span>
+              <span id="stagedFileSize" class="staged-file-size">0 MB</span>
+            </div>
+          </div>
+          <!-- Glass Slide-to-Beam Interactive Slider -->
+          <div id="slideTrack" class="slide-track" role="slider" aria-label="Slide to beam files" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+            <div id="slideProgress" class="slide-progress"></div>
+            <span id="slideLabel" class="slide-label">Slide to Beam to [ U ] Host</span>
+            <div id="slidePuck" class="slide-puck" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
             </div>
           </div>
         </div>
