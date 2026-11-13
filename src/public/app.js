@@ -1343,47 +1343,39 @@ function combineSignals(sigA, sigB) {
   return controller.signal;
 }
 
-const SMALL_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB
+const SMALL_FILE_THRESHOLD_BYTES = 3 * 1024 * 1024; // 3 MB
 
 // Bandwidth Smartness & Dynamic Allocation
-// Files < 10MB: Sent sequentially through a single-bandwidth pipe (0 chunk fragmentation, 0 Wi-Fi contention)
-// Batches of multiple files >= 10MB: Sent in parallel concurrent streams
+// Files < 3MB: Sent in parallel concurrent streams (fast multi-photo & document beam)
+// Files >= 3MB: Sent single-by-single through a dedicated 100% bandwidth pipe (0 Wi-Fi airtime contention)
 function getOptimalChunkConfig(fileSize, totalFiles = 1, isParallelSlot = false) {
   if (fileSize < SMALL_FILE_THRESHOLD_BYTES) {
     return {
       chunkSize: Math.max(1, fileSize),
       concurrency: 1,
-      mode: totalFiles > 1 ? 'Single-Bandwidth Queued (<10 MB)' : 'Dedicated Full-Bandwidth Turbo Pipe'
+      mode: isParallelSlot || totalFiles > 1 ? 'Parallel Multi-Stream (<3 MB)' : 'Dedicated Fast Pipe'
     };
   }
 
-  if (totalFiles === 1 || !isParallelSlot) {
-    if (fileSize <= 64 * 1024 * 1024) {
-      return {
-        chunkSize: Math.max(1, fileSize),
-        concurrency: 1,
-        mode: 'Dedicated Full-Bandwidth Turbo Pipe'
-      };
-    }
-    if (fileSize <= 256 * 1024 * 1024) {
-      return {
-        chunkSize: 32 * 1024 * 1024,
-        concurrency: 1,
-        mode: 'High-Bandwidth Dedicated Pipe'
-      };
-    }
+  // Files >= 3MB: strictly single-by-single dedicated transfer
+  if (fileSize <= 64 * 1024 * 1024) {
     return {
-      chunkSize: 16 * 1024 * 1024,
-      concurrency: 2,
-      mode: 'Dual High-Speed Pipeline'
+      chunkSize: Math.max(1, fileSize),
+      concurrency: 1,
+      mode: 'Dedicated Full-Bandwidth Pipe (Single Transfer)'
     };
   }
-
-  // Multiple files >= 10MB running in parallel
+  if (fileSize <= 256 * 1024 * 1024) {
+    return {
+      chunkSize: 32 * 1024 * 1024,
+      concurrency: 1,
+      mode: 'High-Bandwidth Dedicated Pipe (Single Transfer)'
+    };
+  }
   return {
-    chunkSize: fileSize > 256 * 1024 * 1024 ? 8 * 1024 * 1024 : 4 * 1024 * 1024,
+    chunkSize: 16 * 1024 * 1024,
     concurrency: 1,
-    mode: 'Parallel Multi-Stream Pipeline'
+    mode: 'Dedicated High-Speed Pipe (Single Transfer)'
   };
 }
 
@@ -1672,7 +1664,7 @@ function refreshAggregateProgressUI(force = false) {
   transferStats.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(totalBytes)}`;
   if (aggregateSample.lastSpeedMb) transferSpeed.textContent = aggregateSample.lastSpeedMb;
   progressBar.style.width = `${pct}%`;
-  transferChunks.textContent = `Parallel Mode (>=10 MB) • ${uploadingItems.length} Concurrent Streams`;
+  transferChunks.textContent = `Parallel Mode (<3 MB) • ${uploadingItems.length} Concurrent Streams`;
   transferStatus.textContent = `Streaming ${uploadingItems.length} files simultaneously across LAN...`;
 }
 
@@ -1746,37 +1738,39 @@ async function processBatchQueue() {
     const smallWaiting = waiting.filter(i => i.size < SMALL_FILE_THRESHOLD_BYTES);
     const largeWaiting = waiting.filter(i => i.size >= SMALL_FILE_THRESHOLD_BYTES);
 
-    // 1. Small files (< 10MB): run strictly sequentially on single-bandwidth queue
+    // 1. Small files (< 3MB): run in parallel concurrent streams (or single if only 1 remains)
     if (smallWaiting.length > 0) {
-      const nextSmall = smallWaiting[0];
-      const ok = await runQueueItemWithRetry(nextSmall, activeBatchQueue.length, false);
-      if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
-      await new Promise(r => setTimeout(r, 80));
-      continue;
-    }
-
-    // 2. Large files (>= 10MB): run in parallel when 2+ large items exist, or full single pipe when only 1
-    if (largeWaiting.length === 1) {
-      const ok = await runQueueItemWithRetry(largeWaiting[0], activeBatchQueue.length, false);
-      if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
-      await new Promise(r => setTimeout(r, 80));
-      continue;
-    }
-
-    const hasUltraLarge = largeWaiting.some(i => i.size > 256 * 1024 * 1024);
-    const parallelSlots = Math.min(hasUltraLarge ? 2 : 3, largeWaiting.length);
-
-    async function parallelWorker() {
-      while (!isCurrentTransferCancelled) {
-        const nextLarge = activeBatchQueue.find(i => i.status === 'waiting' && i.size >= SMALL_FILE_THRESHOLD_BYTES);
-        if (!nextLarge) break;
-        const ok = await runQueueItemWithRetry(nextLarge, activeBatchQueue.length, true);
+      if (smallWaiting.length === 1) {
+        const ok = await runQueueItemWithRetry(smallWaiting[0], activeBatchQueue.length, false);
         if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 60));
+        continue;
       }
+
+      // Stream small files concurrently across 3 parallel workers
+      const parallelSlots = Math.min(3, smallWaiting.length);
+      async function parallelWorker() {
+        while (!isCurrentTransferCancelled) {
+          const nextSmall = activeBatchQueue.find(i => i.status === 'waiting' && i.size < SMALL_FILE_THRESHOLD_BYTES);
+          if (!nextSmall) break;
+          const ok = await runQueueItemWithRetry(nextSmall, activeBatchQueue.length, true);
+          if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
+          await new Promise(r => setTimeout(r, 60));
+        }
+      }
+
+      await Promise.all(Array.from({ length: parallelSlots }, () => parallelWorker()));
+      continue;
     }
 
-    await Promise.all(Array.from({ length: parallelSlots }, () => parallelWorker()));
+    // 2. Large files (>= 3MB): run strictly single-by-single with 100% channel bandwidth
+    if (largeWaiting.length > 0) {
+      const nextLarge = largeWaiting[0];
+      const ok = await runQueueItemWithRetry(nextLarge, activeBatchQueue.length, false);
+      if (ok) successCount++; else if (!isCurrentTransferCancelled) failedCount++;
+      await new Promise(r => setTimeout(r, 80));
+      continue;
+    }
   }
 
   successCount = activeBatchQueue.filter(i => i.status === 'done').length;

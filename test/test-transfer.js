@@ -511,7 +511,7 @@ async function runTests() {
       const htmlText = await (await fetch(`${BASE_URL}/`)).text();
       const appJsText = await (await fetch(`${BASE_URL}/app.js`)).text();
       assert(appJsText.includes('getClientFileContext') && appJsText.includes('Save Photo') && appJsText.includes('Add Contact'), 'Web UI includes context-aware handoff actions');
-      assert(appJsText.includes('SMALL_FILE_THRESHOLD_BYTES') && appJsText.includes('parallelWorker'), 'Web UI routes <10MB batches sequentially on single pipe and >=10MB batches in parallel');
+      assert(appJsText.includes('SMALL_FILE_THRESHOLD_BYTES') && appJsText.includes('parallelWorker'), 'Web UI routes <3MB batches in parallel and >=3MB files single-by-single');
       assert(
         htmlText.includes('receiveToastIcon') &&
         htmlText.includes('lucide-download') &&

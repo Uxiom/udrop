@@ -332,8 +332,8 @@ npm install -g @uxiom/udrop</pre>
             <p>Sending 1 file (such as a 40 MB video) uses 1 continuous XHR stream (<code>concurrency: 1</code> for files up to 64 MB; 32 MB chunks up to 256 MB) with live 0%-100% progress and a 25s inactivity watchdog instead of a fixed wall-clock cutoff.</p>
           </div>
           <div class="mini-card">
-            <h4>Smart Batching (<code>&lt; 10 MB</code> Queued vs <code>&ge; 10 MB</code> Parallel)</h4>
-            <p>Multi-file items under 10 MB queue sequentially through a single-bandwidth socket without fragmentation, while multiple files 10 MB or larger stream in parallel across concurrent 4 MB/8 MB resumable pipelines. Tapping <strong>Cancel</strong> aborts active XHR sockets, deletes partial files from disk, purges server session maps, and clears the phone queue immediately.</p>
+            <h4>Smart Batching (<code>&lt; 3 MB</code> Parallel vs <code>&ge; 3 MB</code> Single-by-Single)</h4>
+            <p>Multi-file items under 3 MB stream in parallel across concurrent pipelines to eliminate request round-trip latency, while files 3 MB or larger stream strictly single-by-single with 100% dedicated channel bandwidth to eliminate Wi-Fi airtime contention and router bufferbloat. Tapping <strong>Cancel</strong> aborts active XHR sockets, deletes partial files from disk, purges server session maps, and clears the phone queue immediately.</p>
           </div>
         </div>
       </section>

@@ -53,7 +53,7 @@ npm install -g @uxiom/udrop
 ### Sending Files from Phone to Windows (Bandwidth Smartness)
 1. On your phone, tap **Select Videos / Photos** or **All Files**.
 2. **Single File Mode** (for example a 40 MB video): uDrop automatically allocates 100% bandwidth to one continuous direct stream (`<= 64 MB` in one full-speed request with real-time XHR percentage and inactivity watchdog), avoiding chunk round-trip latency.
-3. **Smart Adaptive Batching (`< 10 MB` Queued vs `>= 10 MB` Parallel)**: Multi-file items under `10 MB` stream sequentially through a single-bandwidth queue with zero chunk fragmentation; batches with files `10 MB` or larger automatically switch to concurrent parallel streams (`4 MB`/`8 MB` resumable chunks, live aggregate progress, retry resilience, and automatic mobile wake-lock).
+3. **Smart Adaptive Batching (`< 3 MB` Parallel vs `>= 3 MB` Single-by-Single)**: Multi-file items under `3 MB` (such as photos, small documents, and audio clips) stream in parallel across concurrent pipelines to eliminate HTTP round-trip latency; larger files (`>= 3 MB`, such as videos, ProRes footage, and archives) stream strictly single-by-single through a dedicated 100% bandwidth pipe to eliminate Wi-Fi airtime contention and router bufferbloat.
 4. Files are saved directly to your PC's `Downloads\uDrop` folder.
 
 ### Sending Files from Windows to Phone (Context-Aware Handoff)
