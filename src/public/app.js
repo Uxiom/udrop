@@ -31,6 +31,38 @@ const activeUploadSessions = new Map(); // fileId -> AbortController
 let isCurrentTransferCancelled = false;
 const refreshFilesBtn = document.getElementById('refreshFilesBtn');
 
+// Fluid Kinetic Beam Transfer Engine
+const kineticBeamCanvas = document.getElementById('kineticBeamCanvas');
+let kineticBeam = null;
+if (typeof window !== 'undefined' && window.createKineticBeam && kineticBeamCanvas) {
+  kineticBeam = window.createKineticBeam(kineticBeamCanvas);
+}
+
+function syncKineticBeamSlots() {
+  if (!kineticBeam) return;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const myKind = isMobile ? 'mobile' : 'desktop';
+  const myName = mySlot === 'U' ? 'Host PC' : (isMobile ? 'My Phone' : 'My Device');
+
+  let tName = 'Host PC';
+  let tKind = 'desktop';
+  if (targetSlot === 'ALL') {
+    tName = 'Swarm Mesh';
+    tKind = 'desktop';
+  } else if (targetSlot === 'U') {
+    tName = 'Master Host';
+    tKind = 'desktop';
+  } else if (Array.isArray(currentRingState)) {
+    const node = currentRingState.find(n => n.slot === targetSlot);
+    if (node) {
+      tName = node.name || `Device ${targetSlot}`;
+      tKind = /iPhone|iPad|Android|phone/i.test(tName) ? 'mobile' : 'desktop';
+    }
+  }
+
+  kineticBeam.setSlots(mySlot || 'YOU', targetSlot || 'U', myName, tName, myKind, tKind);
+}
+
 // UXIOM Mesh DOM Elements
 const mySlotBadge = document.getElementById('mySlotBadge');
 const meshRing = document.getElementById('meshRing');
@@ -704,6 +736,7 @@ function selectTarget(slot, label) {
   if (dropzoneActionText) {
     dropzoneActionText.textContent = `Tap or Drag to Beam to ${label}`;
   }
+  syncKineticBeamSlots();
   renderRing(currentRingState);
 }
 
@@ -841,6 +874,14 @@ function handleHostTransferStart(data) {
   if (islandProgressBar) islandProgressBar.style.width = '0%';
   if (islandPercent) islandPercent.textContent = '0%';
 
+  if (kineticBeam) {
+    const fromSlot = data.fromSlot || 'Node';
+    const toSlot = mySlot || 'U';
+    kineticBeam.setSlots(fromSlot, toSlot, `Node [ ${fromSlot} ]`, 'Master Host', 'mobile', 'desktop');
+    kineticBeam.reset();
+    kineticBeam.triggerLaunch({ name: data.fileName, size: data.fileSize || 0 });
+  }
+
   setIslandState('state-receiving');
 }
 
@@ -865,6 +906,10 @@ function handleHostTransferProgress(data) {
   if (islandProgressBar) islandProgressBar.style.width = `${percent}%`;
   if (islandPercent) islandPercent.textContent = `${percent}%`;
 
+  if (kineticBeam) {
+    kineticBeam.updateProgress(percent);
+  }
+
   const currentBytes = hasByteProgress
     ? data.receivedBytes
     : (currentHostTransfer.fileSize ? (data.receivedTotal / currentHostTransfer.totalChunks) * currentHostTransfer.fileSize : 0);
@@ -886,6 +931,7 @@ function handleHostTransferCancel(data) {
   if (!currentHostTransfer || currentHostTransfer.fileId === data.fileId) {
     currentHostTransfer = null;
     if (islandRevertTimer) clearTimeout(islandRevertTimer);
+    if (kineticBeam) kineticBeam.reset();
     setIslandState('state-idle');
   }
 }
@@ -896,6 +942,10 @@ function handleHostTransferComplete(data) {
     filePath: data.filePath,
     fileSize: data.fileSize
   };
+
+  if (kineticBeam) {
+    kineticBeam.complete({ name: data.fileName, size: data.fileSize || 0 });
+  }
 
   if (islandCompleteName) islandCompleteName.textContent = data.fileName;
   if (islandCompleteSize) islandCompleteSize.textContent = formatBytes(data.fileSize);
@@ -1854,6 +1904,11 @@ async function uploadFileChunked(file, queueIndex = 1, totalFiles = 1, onProgres
     if (cancelTransferBtn) cancelTransferBtn.style.display = '';
 
     if (ownsMainPanel()) {
+      syncKineticBeamSlots();
+      if (kineticBeam) {
+        kineticBeam.reset();
+        kineticBeam.triggerLaunch({ name: file.name || cleanBase, size: file.size });
+      }
       transferFileName.textContent = totalFiles > 1 ? `[${queueIndex}/${totalFiles}] ${file.name || cleanBase}` : (file.name || cleanBase);
       transferStats.textContent = `0 B / ${formatBytes(file.size)}`;
       transferSpeed.textContent = 'Connecting...';
@@ -1955,6 +2010,9 @@ async function uploadFileChunked(file, queueIndex = 1, totalFiles = 1, onProgres
         }
 
         progressBar.style.width = `${percent}%`;
+        if (kineticBeam) {
+          kineticBeam.updateProgress(percent);
+        }
         transferStats.textContent = `${formatBytes(bytesUploaded)} / ${formatBytes(file.size)}`;
         transferChunks.textContent = totalFiles > 1
           ? `${config.mode} • Item ${queueIndex}/${totalFiles}`
@@ -2066,6 +2124,9 @@ async function uploadFileChunked(file, queueIndex = 1, totalFiles = 1, onProgres
 
       if (finalRes.ok) {
         if (ownsMainPanel()) {
+          if (kineticBeam) {
+            kineticBeam.complete({ name: file.name || cleanBase, size: file.size });
+          }
           if (mascotFace) mascotFace.textContent = '{- ^ -}';
           progressBar.style.width = '100%';
           transferSpeed.textContent = 'Done!';

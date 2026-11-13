@@ -138,6 +138,27 @@
   --qr-well-deep: rgba(6, 8, 14, 0.22);
   --qr-sublabel: rgba(228, 228, 236, 0.82);
   --qr-collecting: rgba(228, 228, 236, 0.72);
+
+  /* Kinetic Fluid Beam Engine Tokens */
+  --kinetic-node-bg: #09090B;
+  --kinetic-node-rim: #FAFAFA;
+  --kinetic-node-rim-glow: rgba(255, 255, 255, 0.45);
+  --kinetic-node-shadow: rgba(255, 255, 255, 0.35);
+  --kinetic-node-icon: #FAFAFA;
+  --kinetic-grid-dot: rgba(255, 255, 255, 0.09);
+  --kinetic-watermark: rgba(255, 255, 255, 0.22);
+  --kinetic-fiber: rgba(255, 255, 255, 0.12);
+  --kinetic-core-white: #FFFFFF;
+  --kinetic-projectile-glow: rgba(255, 255, 255, 0.75);
+  --kinetic-trail-dot: rgba(255, 255, 255, 0.70);
+  --kinetic-success-green: #22C55E;
+  --kinetic-success-glow: rgba(34, 197, 94, 0.65);
+  --kinetic-success-bg: rgba(34, 197, 94, 0.16);
+  --kinetic-success-border: rgba(34, 197, 94, 0.55);
+  --kinetic-pill-bg: rgba(255, 255, 255, 0.06);
+  --kinetic-pill-border: rgba(255, 255, 255, 0.16);
+  --kinetic-pill-text: #FAFAFA;
+  --kinetic-pill-dot: rgba(255, 255, 255, 0.70);
 }
 
 * {
@@ -771,6 +792,23 @@ body {
   padding: 16px;
   border-radius: 14px;
   border: 1px solid var(--border-color);
+}
+
+.kinetic-beam-stage {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.kinetic-beam-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
 }
 
 .hidden {

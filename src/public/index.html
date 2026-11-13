@@ -152,6 +152,11 @@
 
         <!-- Transfer Progress Area -->
         <div id="transferContainer" class="transfer-container hidden">
+          <!-- Fluid Kinetic Beam Transfer Stage -->
+          <div id="kineticBeamStage" class="kinetic-beam-stage">
+            <canvas id="kineticBeamCanvas" class="kinetic-beam-canvas" width="600" height="180" aria-label="Fluid kinetic transfer animation"></canvas>
+          </div>
+
           <!-- Batch Summary Bar (Visible for multi-file batches) -->
           <div id="batchSummaryBar" class="batch-summary-bar hidden">
             <div class="batch-summary-info">
@@ -262,6 +267,7 @@
   <video id="wakeLockVideo" class="wake-lock-video" playsinline muted loop loading="lazy"></video>
 
   <script src="qr-kinetic.js"></script>
+  <script src="kinetic-beam.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -27,6 +27,7 @@ const filesToEmbed = [
   'index.html',
   'style.css',
   'app.js',
+  'kinetic-beam.js',
   'qr-kinetic.js',
   'qr.html',
   'island.html',
