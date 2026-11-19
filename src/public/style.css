@@ -1672,8 +1672,18 @@ body {
   }
 
   .dropzone {
-    padding: 24px 14px;
-    border-radius: 14px;
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  .dropzone-quick-actions {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .dropzone-quick-actions .btn-picker-pill {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .dropzone-text {
