@@ -19,7 +19,12 @@
 `uDrop` transfers uncompressed 4K videos, photos, contacts, and archives across **Windows 10/11, iPhone (Safari), Android (Chrome), macOS, and Linux** directly over local Wi-Fi — **with zero cloud uploads, zero accounts, and zero mobile app install**.
 
 <p align="center">
-  <img src="docs/udrop-preview.svg" alt="uDrop Liquid Glass QR, Context-Aware Mobile UI, and UXIOM Ring Mesh Architecture" width="100%">
+  <img src="docs/screenshots/desktop-bento.png" alt="uDrop 2-Column Bento Grid Desktop Interface" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/qr-pairing.png" alt="Liquid Glass Optical QR Pairing" width="49%">
+  <img src="docs/screenshots/mobile-pwa.png" alt="Mobile Zero-Install Browser Interface" width="49%">
 </p>
 
 ---
