@@ -1,12 +1,12 @@
 :root {
   /* Strict Monochromatic Zinc System (mono skill & tokens spec) */
   --bg-primary: #09090B;              /* zinc950 */
-  --bg-card: rgba(24, 24, 27, 0.78);   /* zinc900 translucent glass */
-  --bg-surface: #18181B;             /* zinc900 */
+  --bg-card: #18181B;                 /* zinc900 crisp solid surface */
+  --bg-surface: #121214;             /* dark inset surface */
   --bg-surface-elevated: #27272A;    /* zinc800 */
-  --border-color: rgba(255, 255, 255, 0.08); /* crisp 1px border */
-  --border-highlight: rgba(255, 255, 255, 0.18);
-  --border-focus: rgba(255, 255, 255, 0.35);
+  --border-color: #27272A;           /* crisp 1px physical border */
+  --border-highlight: #3F3F46;       /* zinc700 hover border */
+  --border-focus: #52525B;           /* zinc600 */
 
   /* Monochromatic Typography (WCAG AA on #09090B / #18181B) */
   --text-main: #FAFAFA;              /* zinc50 */
@@ -209,6 +209,49 @@ body {
   z-index: 1;
 }
 
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .app-container {
+    max-width: 1040px;
+    gap: 20px;
+  }
+
+  .main-content {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    grid-template-areas:
+      "mesh upload"
+      "mesh incoming"
+      "mesh download";
+    gap: 20px;
+    align-items: start;
+  }
+
+  .mesh-card {
+    grid-area: mesh;
+    position: sticky;
+    top: 20px;
+  }
+
+  .upload-card {
+    grid-area: upload;
+  }
+
+  .incoming-card {
+    grid-area: incoming;
+  }
+
+  .download-card {
+    grid-area: download;
+  }
+}
+
 /* =========================================================
    Header & Navigation
    ========================================================= */
@@ -218,10 +261,8 @@ body {
   align-items: center;
   padding: 12px 20px;
   background: var(--bg-card);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--border-color);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: 0 4px 20px var(--shadow-dark-40);
 }
 
@@ -340,15 +381,18 @@ body {
    ========================================================= */
 .card {
   background: var(--bg-card);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: 0 8px 28px var(--shadow-dark-45);
+  box-shadow: 0 4px 20px var(--shadow-dark-45);
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--border-highlight);
 }
 
 .card-header {
@@ -360,7 +404,7 @@ body {
 .card-header h2 {
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
   color: var(--text-main);
 }
 
@@ -368,7 +412,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
-  background: var(--glass-06);
+  background: var(--bg-surface-elevated);
   color: var(--text-muted);
   padding: 4px 8px;
   border-radius: 6px;
@@ -681,7 +725,7 @@ body {
   gap: 8px;
   font-size: 12px;
   padding: 8px 12px;
-  background: var(--glass-03);
+  background: var(--bg-surface);
   border-radius: 10px;
   border: 1px solid var(--border-color);
 }
@@ -691,7 +735,7 @@ body {
   flex-shrink: 0;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   font-weight: 600;
 }
 
@@ -711,27 +755,28 @@ body {
    ========================================================= */
 .dropzone {
   position: relative;
-  border: 1.5px dashed var(--glass-14);
-  border-radius: 18px;
-  padding: 36px 20px;
+  border: 1.5px dashed var(--border-color);
+  border-radius: 14px;
+  padding: 28px 20px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  background: var(--glass-015);
+  background: var(--bg-surface);
 }
 
 .dropzone:hover, .dropzone.dragover {
   border-color: var(--text-main);
-  background: var(--glass-04);
+  border-style: solid;
+  background: var(--bg-surface-elevated);
   transform: translateY(-1px);
 }
 
 .dropzone-icon-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: var(--glass-05);
-  border: 1px solid var(--glass-12);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-highlight);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -741,9 +786,9 @@ body {
 }
 
 .dropzone:hover .dropzone-icon-box, .dropzone.dragover .dropzone-icon-box {
-  background: var(--glass-12);
+  background: var(--border-highlight);
   border-color: var(--text-main);
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 .file-input {
@@ -800,7 +845,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--shadow-dark-40);
+  background: var(--bg-surface);
   padding: 16px;
   border-radius: 14px;
   border: 1px solid var(--border-color);
@@ -1778,12 +1823,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--glass-08);
-  border: 1px solid var(--glass-16);
-  color: var(--text-main);
+  background: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
   font-size: 12px;
   font-weight: 700;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: 9999px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1791,21 +1836,20 @@ body {
 }
 
 .btn-picker-pill:hover {
-  background: var(--glass-16);
-  border-color: var(--glass-30);
+  background: var(--btn-primary-hover);
+  border-color: var(--btn-primary-hover);
   transform: translateY(-1px);
 }
 
 .btn-picker-pill.outline {
-  background: transparent;
-  border-color: var(--glass-10);
-  color: var(--text-muted);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-highlight);
+  color: var(--text-main);
 }
 
 .btn-picker-pill.outline:hover {
-  background: var(--glass-06);
-  border-color: var(--glass-20);
-  color: var(--text-main);
+  background: var(--border-highlight);
+  border-color: var(--border-focus);
 }
 
 .dropzone-busy {
