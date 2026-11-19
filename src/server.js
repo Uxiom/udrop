@@ -86,7 +86,7 @@ export function startServer({ port = 4040, host = '0.0.0.0', onUploadComplete, o
       if (req.method === 'GET' && pathname === '/api/info') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          hostname: os.hostname(),
+          hostname: getLocalHostInfo().hostname,
           platform: os.platform(),
           port
         }));

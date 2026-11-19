@@ -11,10 +11,11 @@ const DISCONNECT_GRACE_MS = 1800;
 
 // Initialize Host Node [ U ]
 function initHostNode() {
+  const hostLabel = process.env.UDROP_HOSTNAME || os.hostname();
   MESH_NODES.set('U', {
     slot: 'U',
     clientId: 'host_master',
-    name: `${os.hostname()} (Host)`,
+    name: `${hostLabel} (Host)`,
     platform: os.platform(),
     isHost: true,
     lastSeen: Date.now()

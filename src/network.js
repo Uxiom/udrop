@@ -47,7 +47,8 @@ export function getLocalIpAddresses() {
  * Prevents raw internal IP addresses from being exposed or displayed.
  */
 export function getLocalHostInfo(port = 4040) {
-  const cleanHost = os.hostname().toLowerCase().replace(/[^a-z0-9\-]/g, '');
+  const customHost = process.env.UDROP_HOSTNAME;
+  const cleanHost = (customHost || os.hostname()).toLowerCase().replace(/[^a-z0-9\-]/g, '');
   const mdnsHost = `${cleanHost}.local`;
   const { primaryIp, allIps } = getLocalIpAddresses();
 
